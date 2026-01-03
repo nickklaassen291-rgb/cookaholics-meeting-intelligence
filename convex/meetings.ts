@@ -199,3 +199,64 @@ export const getAudioUrl = query({
     return await ctx.storage.getUrl(args.storageId);
   },
 });
+
+// Start transcription process
+export const startTranscription = mutation({
+  args: {
+    meetingId: v.id("meetings"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.meetingId, {
+      transcriptionStatus: "processing",
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Update transcription result
+export const updateTranscription = mutation({
+  args: {
+    meetingId: v.id("meetings"),
+    transcription: v.string(),
+    status: v.union(v.literal("completed"), v.literal("failed")),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.meetingId, {
+      transcription: args.transcription,
+      transcriptionStatus: args.status,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Mark transcription as failed
+export const failTranscription = mutation({
+  args: {
+    meetingId: v.id("meetings"),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.meetingId, {
+      transcriptionStatus: "failed",
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Retry transcription
+export const retryTranscription = mutation({
+  args: {
+    meetingId: v.id("meetings"),
+  },
+  handler: async (ctx, args) => {
+    const meeting = await ctx.db.get(args.meetingId);
+    if (!meeting?.audioFileId) {
+      throw new Error("No audio file found");
+    }
+
+    await ctx.db.patch(args.meetingId, {
+      transcriptionStatus: "processing",
+      updatedAt: Date.now(),
+    });
+  },
+});

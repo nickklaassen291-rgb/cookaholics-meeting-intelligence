@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { AudioUploader, AudioPlayer, TranscriptionDisplay } from "@/components/audio";
 import {
   ArrowLeft,
   CalendarDays,
@@ -33,7 +34,6 @@ import {
   MoreVertical,
   Edit,
   Trash2,
-  Upload,
   FileText,
   CheckSquare,
   AlertTriangle,
@@ -140,9 +140,19 @@ export default function VergaderingDetailPage() {
     }
   };
 
-  const toggleAttendeePresence = (_userId: string) => {
-    // This would update the presentAttendeeIds
-    // For now just showing UI, actual implementation in Task 3+
+  const toggleAttendeePresence = (userId: Id<"users">) => {
+    // Toggle presence for the given user
+    const isPresent = presentAttendees.includes(userId);
+    const newPresent = isPresent
+      ? presentAttendees.filter((id) => id !== userId)
+      : [...presentAttendees, userId];
+
+    // Update meeting with new present attendees
+    updateStatus({
+      id: meeting._id,
+      status: meeting.status as "scheduled" | "completed" | "cancelled",
+      presentAttendeeIds: newPresent,
+    });
   };
 
   return (
@@ -219,42 +229,19 @@ export default function VergaderingDetailPage() {
                   Audio opname
                 </CardTitle>
                 <CardDescription>
-                  Upload de audio-opname van deze vergadering
+                  {meeting.audioFileId
+                    ? "Beluister de audio-opname van deze vergadering"
+                    : "Upload de audio-opname van deze vergadering"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {meeting.audioFileId ? (
-                  <div className="flex items-center gap-4 p-4 rounded-lg bg-muted">
-                    <Mic className="h-8 w-8 text-primary" />
-                    <div className="flex-1">
-                      <p className="font-medium">{meeting.audioFileName || "Audio bestand"}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {meeting.transcriptionStatus === "completed"
-                          ? "Transcriptie voltooid"
-                          : meeting.transcriptionStatus === "processing"
-                          ? "Transcriptie wordt verwerkt..."
-                          : "Wacht op transcriptie"}
-                      </p>
-                    </div>
-                    <Badge>
-                      {meeting.transcriptionStatus === "completed" ? "Klaar" : "Verwerken"}
-                    </Badge>
-                  </div>
+                  <AudioPlayer
+                    storageId={meeting.audioFileId}
+                    fileName={meeting.audioFileName}
+                  />
                 ) : (
-                  <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                    <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
-                    <h3 className="font-medium mb-1">Upload audio bestand</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Sleep een bestand hierheen of klik om te uploaden
-                    </p>
-                    <Button variant="outline">
-                      <Upload className="mr-2 h-4 w-4" />
-                      Bestand selecteren
-                    </Button>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      MP3, M4A of WAV (max. 100MB)
-                    </p>
-                  </div>
+                  <AudioUploader meetingId={meeting._id} />
                 )}
               </CardContent>
             </Card>
@@ -271,17 +258,12 @@ export default function VergaderingDetailPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {meeting.transcription ? (
-                  <div className="prose prose-sm max-w-none">
-                    <p className="whitespace-pre-wrap">{meeting.transcription}</p>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <FileText className="h-10 w-10 mx-auto mb-4 opacity-50" />
-                    <p>Nog geen transcriptie beschikbaar</p>
-                    <p className="text-sm">Upload eerst een audio bestand</p>
-                  </div>
-                )}
+                <TranscriptionDisplay
+                  meetingId={meeting._id}
+                  transcription={meeting.transcription}
+                  status={meeting.transcriptionStatus}
+                  hasAudio={!!meeting.audioFileId}
+                />
               </CardContent>
             </Card>
 
