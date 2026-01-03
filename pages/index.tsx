@@ -1,17 +1,19 @@
 import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/router";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export default function Home() {
   const { isSignedIn, isLoaded } = useAuth();
   const router = useRouter();
+  const hasRedirected = useRef(false);
 
   useEffect(() => {
-    if (isLoaded) {
+    if (isLoaded && !hasRedirected.current) {
+      hasRedirected.current = true;
       if (isSignedIn) {
-        router.push("/dashboard");
+        router.replace("/dashboard");
       } else {
-        router.push("/sign-in");
+        router.replace("/sign-in");
       }
     }
   }, [isLoaded, isSignedIn, router]);
