@@ -1,40 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+# Cookaholics Meeting Intelligence
+
+AI-powered meeting intelligence system for Cookaholics. Automatically transcribe, summarize, and extract action items from department meetings.
+
+## Features
+
+- **Dutch Transcription** - Accurate Dutch speech-to-text via OpenAI Whisper
+- **AI Summaries** - Concise 5-bullet summaries via Claude AI
+- **Action Items** - Automatic extraction with owners and deadlines
+- **Red Flag Detection** - Identify escalations and issues automatically
+- **Weekly Reports** - Automated digests for departments and MT
+- **Department Dashboards** - Keuken, Sales, Marketing, and MT views
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (Pages Router)
+- **Database**: Convex
+- **Auth**: Clerk
+- **AI**: OpenAI Whisper + Anthropic Claude
+- **Email**: Resend
+- **Styling**: Tailwind CSS v3 + shadcn/ui
+- **Hosting**: Vercel
 
 ## Getting Started
 
-First, run the development server:
+See [SETUP.md](./SETUP.md) for detailed setup instructions.
+
+### Quick Start
 
 ```bash
+# Install dependencies
+npm install
+
+# Start Convex (Terminal 1)
+npx convex dev
+
+# Start Next.js (Terminal 2)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Project Structure
 
-You can start editing the page by modifying `pages/index.tsx`. The page auto-updates as you edit the file.
+```
+├── components/
+│   ├── layout/          # Sidebar, Topbar, Layout
+│   └── ui/              # shadcn components
+├── convex/
+│   ├── schema.ts        # Database schema
+│   ├── departments.ts   # Department queries/mutations
+│   ├── meetings.ts      # Meeting queries/mutations
+│   ├── actionItems.ts   # Action item queries/mutations
+│   └── users.ts         # User queries/mutations
+├── pages/
+│   ├── api/             # API routes
+│   ├── dashboard/       # Dashboard pages
+│   ├── meetings/        # Meeting pages
+│   └── ...
+├── lib/                 # Utility functions
+├── prd/                 # Product requirements docs
+└── .claude/commands/    # Claude Code workflow commands
+```
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.ts`.
+## Documentation
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
+- [PRD](./prd/prd-cookaholics-meeting-intelligence.md) - Product requirements
+- [Tasks](./prd/tasks-cookaholics-meeting-intelligence.md) - Implementation tasks
+- [Guidelines](./prd/task-guidelines-cookaholics.md) - Coding standards
 
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Git Workflow
 
-## Learn More
+1. `main` - Production
+2. `staging` - Staging environment
+3. `feature/*` - Feature branches from staging
 
-To learn more about Next.js, take a look at the following resources:
+See [task-guidelines](./prd/task-guidelines-cookaholics.md) for details.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
+## License
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+Private - Cookaholics
