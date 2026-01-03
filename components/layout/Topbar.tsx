@@ -29,7 +29,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         onClick={onMenuClick}
       >
         <Menu className="h-5 w-5" />
-        <span className="sr-only">Toggle menu</span>
+        <span className="sr-only">Menu openen</span>
       </Button>
 
       {/* Search */}
@@ -38,7 +38,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search meetings, action items..."
+            placeholder="Zoek vergaderingen, actiepunten..."
             className="pl-9"
           />
         </div>
@@ -57,33 +57,33 @@ export function Topbar({ onMenuClick }: TopbarProps) {
               >
                 3
               </Badge>
-              <span className="sr-only">Notifications</span>
+              <span className="sr-only">Meldingen</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+            <DropdownMenuLabel>Meldingen</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="flex flex-col items-start gap-1">
-              <span className="font-medium">Action item due tomorrow</span>
+              <span className="font-medium">Actiepunt deadline morgen</span>
               <span className="text-xs text-muted-foreground">
-                Review Q4 marketing budget
+                Q4 marketing budget beoordelen
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem className="flex flex-col items-start gap-1">
-              <span className="font-medium">New meeting scheduled</span>
+              <span className="font-medium">Nieuwe vergadering gepland</span>
               <span className="text-xs text-muted-foreground">
-                Weekly Sales Sync - Tomorrow at 10:00
+                Wekelijkse Sales Sync - Morgen om 10:00
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem className="flex flex-col items-start gap-1">
-              <span className="font-medium">Transcription complete</span>
+              <span className="font-medium">Transcriptie voltooid</span>
               <span className="text-xs text-muted-foreground">
-                Marketing Daily - Dec 3rd
+                Marketing Daily - 3 december
               </span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-center text-sm text-primary">
-              View all notifications
+              Alle meldingen bekijken
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -91,7 +91,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         {/* User menu */}
         <div className="flex items-center gap-3">
           <div className="hidden md:block text-right">
-            <p className="text-sm font-medium">{user?.fullName || "User"}</p>
+            <p className="text-sm font-medium">{user?.fullName || "Gebruiker"}</p>
             <p className="text-xs text-muted-foreground">
               {user?.primaryEmailAddress?.emailAddress}
             </p>

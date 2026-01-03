@@ -27,40 +27,40 @@ const mainNavItems: NavItem[] = [
     icon: <Home className="h-4 w-4" />,
   },
   {
-    href: "/meetings",
-    label: "Meetings",
+    href: "/vergaderingen",
+    label: "Vergaderingen",
     icon: <CalendarDays className="h-4 w-4" />,
   },
   {
-    href: "/action-items",
-    label: "Action Items",
+    href: "/actiepunten",
+    label: "Actiepunten",
     icon: <CheckSquare className="h-4 w-4" />,
   },
   {
-    href: "/reports",
-    label: "Reports",
+    href: "/rapportages",
+    label: "Rapportages",
     icon: <FileText className="h-4 w-4" />,
   },
 ];
 
 const departmentNavItems: NavItem[] = [
   {
-    href: "/departments/keuken",
+    href: "/afdelingen/keuken",
     label: "Keuken",
     icon: <LayoutDashboard className="h-4 w-4" />,
   },
   {
-    href: "/departments/sales",
+    href: "/afdelingen/sales",
     label: "Sales",
     icon: <LayoutDashboard className="h-4 w-4" />,
   },
   {
-    href: "/departments/marketing",
+    href: "/afdelingen/marketing",
     label: "Marketing",
     icon: <LayoutDashboard className="h-4 w-4" />,
   },
   {
-    href: "/departments/mt",
+    href: "/afdelingen/mt",
     label: "MT",
     icon: <LayoutDashboard className="h-4 w-4" />,
   },
@@ -68,13 +68,13 @@ const departmentNavItems: NavItem[] = [
 
 const adminNavItems: NavItem[] = [
   {
-    href: "/admin/users",
-    label: "Users",
+    href: "/admin/gebruikers",
+    label: "Gebruikers",
     icon: <Users className="h-4 w-4" />,
   },
   {
-    href: "/admin/settings",
-    label: "Settings",
+    href: "/admin/instellingen",
+    label: "Instellingen",
     icon: <Settings className="h-4 w-4" />,
   },
 ];
@@ -141,10 +141,10 @@ export function Sidebar({ className }: SidebarProps) {
 
         <Separator className="my-4" />
 
-        {/* Departments */}
+        {/* Afdelingen */}
         <div className="space-y-1">
           <p className="px-3 text-xs font-medium uppercase text-muted-foreground">
-            Departments
+            Afdelingen
           </p>
           {departmentNavItems.map((item) => (
             <NavLink
@@ -157,10 +157,10 @@ export function Sidebar({ className }: SidebarProps) {
 
         <Separator className="my-4" />
 
-        {/* Admin (conditionally shown based on role) */}
+        {/* Beheer */}
         <div className="space-y-1">
           <p className="px-3 text-xs font-medium uppercase text-muted-foreground">
-            Admin
+            Beheer
           </p>
           {adminNavItems.map((item) => (
             <NavLink
