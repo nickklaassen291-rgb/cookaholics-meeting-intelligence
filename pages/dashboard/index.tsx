@@ -1,11 +1,40 @@
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Layout } from "@/components/layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, CheckSquare, Clock, Upload, AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import { format } from "date-fns";
+import { nl } from "date-fns/locale";
 
 export default function DashboardPage() {
+  const meetings = useQuery(api.meetings.list, { limit: 10 });
+  const upcomingMeetings = useQuery(api.meetings.listUpcoming, { limit: 5 });
+  const openActionItems = useQuery(api.actionItems.listOpen, { limit: 5 });
+  const overdueItems = useQuery(api.actionItems.listOverdue, {});
+
+  // Calculate stats
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const todaysMeetings = meetings?.filter((m) => {
+    const date = new Date(m.date);
+    return date >= todayStart && date <= todayEnd;
+  }) || [];
+
+  const completedToday = todaysMeetings.filter((m) => m.status === "completed").length;
+  const scheduledToday = todaysMeetings.filter((m) => m.status === "scheduled").length;
+
+  const pendingTranscriptions = meetings?.filter(
+    (m) => m.transcriptionStatus === "pending" || m.transcriptionStatus === "processing"
+  ).length || 0;
+
+  const redFlagCount = meetings?.filter((m) => m.redFlags && m.redFlags.length > 0).length || 0;
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -35,9 +64,9 @@ export default function DashboardPage() {
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">3</div>
+              <div className="text-2xl font-bold">{todaysMeetings.length}</div>
               <p className="text-xs text-muted-foreground">
-                2 afgerond, 1 gepland
+                {completedToday} afgerond, {scheduledToday} gepland
               </p>
             </CardContent>
           </Card>
@@ -50,9 +79,9 @@ export default function DashboardPage() {
               <CheckSquare className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">12</div>
+              <div className="text-2xl font-bold">{openActionItems?.length || 0}</div>
               <p className="text-xs text-muted-foreground">
-                3 deadline deze week
+                {overdueItems?.length || 0} te laat
               </p>
             </CardContent>
           </Card>
@@ -65,7 +94,7 @@ export default function DashboardPage() {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">2</div>
+              <div className="text-2xl font-bold">{pendingTranscriptions}</div>
               <p className="text-xs text-muted-foreground">
                 Wordt verwerkt...
               </p>
@@ -80,7 +109,7 @@ export default function DashboardPage() {
               <AlertTriangle className="h-4 w-4 text-destructive" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-destructive">1</div>
+              <div className="text-2xl font-bold text-destructive">{redFlagCount}</div>
               <p className="text-xs text-muted-foreground">
                 Vereist aandacht
               </p>
@@ -95,102 +124,99 @@ export default function DashboardPage() {
             <CardHeader>
               <CardTitle>Komende vergaderingen</CardTitle>
               <CardDescription>
-                Geplande vergaderingen voor vandaag en morgen
+                Geplande vergaderingen voor de komende dagen
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center gap-4 rounded-lg border p-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    <CalendarDays className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">Marketing Wekelijks Overleg</p>
-                    <p className="text-sm text-muted-foreground">
-                      Vandaag om 14:00 - Marketing
-                    </p>
-                  </div>
-                  <Badge>Wekelijks</Badge>
+              {!upcomingMeetings || upcomingMeetings.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <CalendarDays className="h-10 w-10 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Geen komende vergaderingen</p>
+                  <Button asChild variant="outline" className="mt-4">
+                    <Link href="/vergaderingen/nieuw">Vergadering plannen</Link>
+                  </Button>
                 </div>
-
-                <div className="flex items-center gap-4 rounded-lg border p-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    <CalendarDays className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">Sales Daily Standup</p>
-                    <p className="text-sm text-muted-foreground">
-                      Morgen om 09:00 - Sales
-                    </p>
-                  </div>
-                  <Badge variant="secondary">Dagelijks</Badge>
+              ) : (
+                <div className="space-y-4">
+                  {upcomingMeetings.map((meeting) => (
+                    <Link key={meeting._id} href={`/vergaderingen/${meeting._id}`}>
+                      <div className="flex items-center gap-4 rounded-lg border p-3 hover:bg-muted/50 transition-colors">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                          <CalendarDays className="h-5 w-5 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium">{meeting.title}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {format(new Date(meeting.date), "EEEE d MMM 'om' HH:mm", { locale: nl })}
+                          </p>
+                        </div>
+                        <Badge variant="outline">{meeting.duration} min</Badge>
+                      </div>
+                    </Link>
+                  ))}
                 </div>
-
-                <div className="flex items-center gap-4 rounded-lg border p-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    <CalendarDays className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">Marketing-Sales Sync</p>
-                    <p className="text-sm text-muted-foreground">
-                      Morgen om 11:00 - Cross-afdeling
-                    </p>
-                  </div>
-                  <Badge variant="outline">Cross</Badge>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
           {/* My Action Items */}
           <Card>
             <CardHeader>
-              <CardTitle>Mijn actiepunten</CardTitle>
+              <CardTitle>Open actiepunten</CardTitle>
               <CardDescription>
-                Actiepunten aan jou toegewezen
+                Actiepunten die nog afgerond moeten worden
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-start gap-4 rounded-lg border p-3">
-                  <div className="flex h-5 w-5 items-center justify-center">
-                    <div className="h-2 w-2 rounded-full bg-destructive" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">Q4 budget voorstel beoordelen</p>
-                    <p className="text-sm text-muted-foreground">
-                      Uit: MT Maandelijks - Deadline: Vandaag
-                    </p>
-                  </div>
-                  <Badge variant="destructive">Te laat</Badge>
+              {!openActionItems || openActionItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <CheckSquare className="h-10 w-10 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Geen open actiepunten</p>
                 </div>
+              ) : (
+                <div className="space-y-4">
+                  {openActionItems.map((item) => {
+                    const now = todayStart.getTime();
+                    const twoDaysFromNow = now + 2 * 24 * 60 * 60 * 1000;
+                    const isOverdue = item.deadline && item.deadline < now;
+                    const isDueSoon = item.deadline &&
+                      item.deadline > now &&
+                      item.deadline < twoDaysFromNow;
 
-                <div className="flex items-start gap-4 rounded-lg border p-3">
-                  <div className="flex h-5 w-5 items-center justify-center">
-                    <div className="h-2 w-2 rounded-full bg-yellow-500" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">Klant follow-up email versturen</p>
-                    <p className="text-sm text-muted-foreground">
-                      Uit: Sales Wekelijks - Deadline: Morgen
-                    </p>
-                  </div>
-                  <Badge variant="secondary">Bijna</Badge>
+                    return (
+                      <div key={item._id} className="flex items-start gap-4 rounded-lg border p-3">
+                        <div className="flex h-5 w-5 items-center justify-center">
+                          <div
+                            className={`h-2 w-2 rounded-full ${
+                              isOverdue
+                                ? "bg-destructive"
+                                : isDueSoon
+                                ? "bg-yellow-500"
+                                : "bg-green-500"
+                            }`}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium">{item.description}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {item.ownerName && `${item.ownerName} - `}
+                            {item.deadline
+                              ? `Deadline: ${format(new Date(item.deadline), "d MMM", { locale: nl })}`
+                              : "Geen deadline"}
+                          </p>
+                        </div>
+                        <Badge
+                          variant={
+                            isOverdue ? "destructive" : isDueSoon ? "secondary" : "outline"
+                          }
+                        >
+                          {isOverdue ? "Te laat" : isDueSoon ? "Bijna" : "Open"}
+                        </Badge>
+                      </div>
+                    );
+                  })}
                 </div>
-
-                <div className="flex items-start gap-4 rounded-lg border p-3">
-                  <div className="flex h-5 w-5 items-center justify-center">
-                    <div className="h-2 w-2 rounded-full bg-green-500" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">Menu prijzen bijwerken</p>
-                    <p className="text-sm text-muted-foreground">
-                      Uit: Keuken Wekelijks - Deadline: Vrijdag
-                    </p>
-                  </div>
-                  <Badge variant="outline">Open</Badge>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -198,53 +224,56 @@ export default function DashboardPage() {
         {/* Recent Activity */}
         <Card>
           <CardHeader>
-            <CardTitle>Recente activiteit</CardTitle>
+            <CardTitle>Recente vergaderingen</CardTitle>
             <CardDescription>
-              Laatste updates van alle afdelingen
+              Laatst aangemaakte of bijgewerkte vergaderingen
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="h-2 w-2 rounded-full bg-green-500" />
-                <div className="flex-1">
-                  <p className="text-sm">
-                    <span className="font-medium">Marketing Daily</span> transcriptie voltooid
-                  </p>
-                  <p className="text-xs text-muted-foreground">2 minuten geleden</p>
-                </div>
+            {!meetings || meetings.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <CalendarDays className="h-10 w-10 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">Nog geen vergaderingen</p>
+                <Button asChild className="mt-4">
+                  <Link href="/vergaderingen/nieuw">
+                    <Upload className="mr-2 h-4 w-4" />
+                    Eerste vergadering aanmaken
+                  </Link>
+                </Button>
               </div>
-
-              <div className="flex items-center gap-4">
-                <div className="h-2 w-2 rounded-full bg-blue-500" />
-                <div className="flex-1">
-                  <p className="text-sm">
-                    <span className="font-medium">Jan</span> heeft actiepunt afgerond: Social media kalender bijwerken
-                  </p>
-                  <p className="text-xs text-muted-foreground">15 minuten geleden</p>
-                </div>
+            ) : (
+              <div className="space-y-4">
+                {meetings.slice(0, 5).map((meeting) => (
+                  <Link key={meeting._id} href={`/vergaderingen/${meeting._id}`}>
+                    <div className="flex items-center gap-4 hover:bg-muted/50 rounded-lg p-2 transition-colors">
+                      <div
+                        className={`h-2 w-2 rounded-full ${
+                          meeting.status === "completed"
+                            ? "bg-green-500"
+                            : meeting.status === "scheduled"
+                            ? "bg-blue-500"
+                            : "bg-gray-500"
+                        }`}
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm">
+                          <span className="font-medium">{meeting.title}</span>
+                          {" - "}
+                          {meeting.status === "completed"
+                            ? "afgerond"
+                            : meeting.status === "scheduled"
+                            ? "gepland"
+                            : "geannuleerd"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {format(new Date(meeting.date), "d MMMM yyyy", { locale: nl })}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
               </div>
-
-              <div className="flex items-center gap-4">
-                <div className="h-2 w-2 rounded-full bg-yellow-500" />
-                <div className="flex-1">
-                  <p className="text-sm">
-                    <span className="font-medium">Sales Wekelijks</span> heeft een rode vlag: klantklacht genoemd
-                  </p>
-                  <p className="text-xs text-muted-foreground">1 uur geleden</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <div className="h-2 w-2 rounded-full bg-purple-500" />
-                <div className="flex-1">
-                  <p className="text-sm">
-                    <span className="font-medium">Wekelijkse MT Digest</span> rapportage gegenereerd
-                  </p>
-                  <p className="text-xs text-muted-foreground">3 uur geleden</p>
-                </div>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
