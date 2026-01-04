@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Settings,
   Users,
+  UserCheck,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,11 @@ const mainNavItems: NavItem[] = [
     href: "/actiepunten",
     label: "Actiepunten",
     icon: <CheckSquare className="h-4 w-4" />,
+  },
+  {
+    href: "/actiepunten/mijn",
+    label: "Mijn Actiepunten",
+    icon: <UserCheck className="h-4 w-4" />,
   },
   {
     href: "/rapportages",

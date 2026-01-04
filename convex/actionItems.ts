@@ -202,3 +202,149 @@ export const remove = mutation({
     await ctx.db.delete(args.id);
   },
 });
+
+// Get all action items with optional filters
+export const list = query({
+  args: {
+    status: v.optional(v.union(v.literal("open"), v.literal("in_progress"), v.literal("done"))),
+    ownerId: v.optional(v.id("users")),
+    ownerName: v.optional(v.string()),
+    priority: v.optional(v.union(v.literal("high"), v.literal("medium"), v.literal("low"))),
+    includeOverdueOnly: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    let items = await ctx.db.query("actionItems").order("desc").collect();
+
+    // Filter by status
+    if (args.status) {
+      items = items.filter((item) => item.status === args.status);
+    }
+
+    // Filter by owner
+    if (args.ownerId) {
+      items = items.filter((item) => item.ownerId === args.ownerId);
+    }
+
+    // Filter by owner name (for items without linked user)
+    if (args.ownerName) {
+      items = items.filter((item) =>
+        item.ownerName?.toLowerCase().includes(args.ownerName!.toLowerCase())
+      );
+    }
+
+    // Filter by priority
+    if (args.priority) {
+      items = items.filter((item) => item.priority === args.priority);
+    }
+
+    // Filter overdue only
+    if (args.includeOverdueOnly) {
+      const now = Date.now();
+      items = items.filter((item) =>
+        item.deadline && item.deadline < now && item.status !== "done"
+      );
+    }
+
+    return items;
+  },
+});
+
+// Get action item by ID
+export const getById = query({
+  args: { id: v.id("actionItems") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
+// Bulk update status
+export const bulkUpdateStatus = mutation({
+  args: {
+    ids: v.array(v.id("actionItems")),
+    status: v.union(v.literal("open"), v.literal("in_progress"), v.literal("done")),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    for (const id of args.ids) {
+      const updates: Record<string, unknown> = {
+        status: args.status,
+        updatedAt: now,
+      };
+
+      if (args.status === "done") {
+        updates.completedAt = now;
+      }
+
+      await ctx.db.patch(id, updates);
+    }
+
+    return { updated: args.ids.length };
+  },
+});
+
+// Get action items grouped by deadline (for personal view)
+export const listGroupedByDeadline = query({
+  args: {
+    ownerName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let items = await ctx.db
+      .query("actionItems")
+      .filter((q) => q.neq(q.field("status"), "done"))
+      .collect();
+
+    // Filter by owner name if provided
+    if (args.ownerName) {
+      items = items.filter((item) =>
+        item.ownerName?.toLowerCase().includes(args.ownerName!.toLowerCase())
+      );
+    }
+
+    const now = Date.now();
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    const todayEndTime = todayEnd.getTime();
+
+    const weekEnd = new Date();
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    weekEnd.setHours(23, 59, 59, 999);
+    const weekEndTime = weekEnd.getTime();
+
+    const overdue: typeof items = [];
+    const today: typeof items = [];
+    const thisWeek: typeof items = [];
+    const later: typeof items = [];
+    const noDeadline: typeof items = [];
+
+    for (const item of items) {
+      if (!item.deadline) {
+        noDeadline.push(item);
+      } else if (item.deadline < now) {
+        overdue.push(item);
+      } else if (item.deadline <= todayEndTime) {
+        today.push(item);
+      } else if (item.deadline <= weekEndTime) {
+        thisWeek.push(item);
+      } else {
+        later.push(item);
+      }
+    }
+
+    // Sort each group by deadline
+    const sortByDeadline = (a: typeof items[0], b: typeof items[0]) => {
+      if (!a.deadline && !b.deadline) return 0;
+      if (!a.deadline) return 1;
+      if (!b.deadline) return -1;
+      return a.deadline - b.deadline;
+    };
+
+    return {
+      overdue: overdue.sort(sortByDeadline),
+      today: today.sort(sortByDeadline),
+      thisWeek: thisWeek.sort(sortByDeadline),
+      later: later.sort(sortByDeadline),
+      noDeadline: noDeadline.sort((a, b) => b.createdAt - a.createdAt),
+    };
+  },
+});
