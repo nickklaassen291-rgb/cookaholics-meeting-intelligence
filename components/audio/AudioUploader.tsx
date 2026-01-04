@@ -11,13 +11,14 @@ interface AudioUploaderProps {
   onUploadComplete?: () => void;
 }
 
-// Extended MIME types for better compatibility
+// Extended MIME types for better compatibility (including video/mp4 for phone recordings)
 const ACCEPTED_TYPES = [
   "audio/mpeg", "audio/mp3",
   "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/aac",
-  "audio/wav", "audio/x-wav", "audio/wave"
+  "audio/wav", "audio/x-wav", "audio/wave",
+  "video/mp4", "video/quicktime"  // Phone recordings often use video container
 ];
-const ACCEPTED_EXTENSIONS = [".mp3", ".m4a", ".wav", ".aac"];
+const ACCEPTED_EXTENSIONS = [".mp3", ".m4a", ".wav", ".aac", ".mp4", ".mov"];
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
 export function AudioUploader({ meetingId, onUploadComplete }: AudioUploaderProps) {
@@ -40,7 +41,7 @@ export function AudioUploader({ meetingId, onUploadComplete }: AudioUploaderProp
     const hasValidType = ACCEPTED_TYPES.includes(file.type);
 
     if (!hasValidExtension && !hasValidType) {
-      return `Ongeldig bestandstype (${file.type || "onbekend"}). Gebruik MP3, M4A of WAV.`;
+      return `Ongeldig bestandstype (${file.type || "onbekend"}). Gebruik MP3, M4A, MP4 of WAV.`;
     }
     if (file.size > MAX_FILE_SIZE) {
       return "Bestand is te groot. Maximum is 100MB.";
@@ -268,7 +269,7 @@ export function AudioUploader({ meetingId, onUploadComplete }: AudioUploaderProp
         <input
           ref={fileInputRef}
           type="file"
-          accept=".mp3,.m4a,.wav,.aac"
+          accept=".mp3,.m4a,.wav,.aac,.mp4,.mov"
           onChange={handleFileSelect}
           className="hidden"
         />
@@ -282,7 +283,7 @@ export function AudioUploader({ meetingId, onUploadComplete }: AudioUploaderProp
           Bestand selecteren
         </Button>
         <p className="text-xs text-muted-foreground mt-2">
-          MP3, M4A of WAV (max. 100MB)
+          MP3, M4A, MP4 of WAV (max. 100MB)
         </p>
       </div>
     </div>
