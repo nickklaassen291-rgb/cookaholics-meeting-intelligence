@@ -108,6 +108,7 @@ export default defineSchema({
     ownerId: v.optional(v.id("users")),
     ownerName: v.optional(v.string()), // fallback if owner not in system
     deadline: v.optional(v.number()),
+    priority: v.optional(v.union(v.literal("high"), v.literal("medium"), v.literal("low"))),
     status: v.union(
       v.literal("open"),
       v.literal("in_progress"),
