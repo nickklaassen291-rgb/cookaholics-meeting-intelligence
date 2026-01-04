@@ -66,8 +66,14 @@ export default function ActiepuntenPage() {
 
   const updateStatus = useMutation(api.actionItems.updateStatus);
   const bulkUpdateStatus = useMutation(api.actionItems.bulkUpdateStatus);
+  const updateActionItem = useMutation(api.actionItems.update);
 
   const now = Date.now();
+
+  const handleDeadlineChange = async (id: Id<"actionItems">, dateString: string) => {
+    const deadline = dateString ? new Date(dateString).getTime() : undefined;
+    await updateActionItem({ id, deadline });
+  };
 
   // Filter by search query
   const filteredItems = actionItems?.filter((item) => {
@@ -336,23 +342,29 @@ export default function ActiepuntenPage() {
                             {item.ownerName}
                           </span>
                         )}
-                        {item.deadline && (
-                          <span
-                            className={`flex items-center gap-1 ${
-                              isOverdue(item.deadline) && item.status !== "done"
-                                ? "text-destructive font-medium"
-                                : ""
-                            }`}
-                          >
-                            {isOverdue(item.deadline) && item.status !== "done" ? (
-                              <AlertTriangle className="h-3 w-3" />
-                            ) : (
-                              <Calendar className="h-3 w-3" />
-                            )}
-                            {format(new Date(item.deadline), "d MMM yyyy", { locale: nl })}
-                            {isOverdue(item.deadline) && item.status !== "done" && " (verlopen)"}
-                          </span>
-                        )}
+                        <span
+                          className={`flex items-center gap-1 ${
+                            isOverdue(item.deadline) && item.status !== "done"
+                              ? "text-destructive font-medium"
+                              : ""
+                          }`}
+                        >
+                          {isOverdue(item.deadline) && item.status !== "done" ? (
+                            <AlertTriangle className="h-3 w-3" />
+                          ) : (
+                            <Calendar className="h-3 w-3" />
+                          )}
+                          <Input
+                            type="date"
+                            value={item.deadline ? format(new Date(item.deadline), "yyyy-MM-dd") : ""}
+                            onChange={(e) => handleDeadlineChange(item._id, e.target.value)}
+                            className="h-6 w-[130px] text-xs px-2"
+                            placeholder="Deadline"
+                          />
+                          {isOverdue(item.deadline) && item.status !== "done" && (
+                            <span className="text-xs">(verlopen)</span>
+                          )}
+                        </span>
                         <Link
                           href={`/vergaderingen/${item.meetingId}`}
                           className="text-xs hover:text-primary"
