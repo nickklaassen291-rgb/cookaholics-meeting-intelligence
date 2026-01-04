@@ -4,21 +4,25 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { useToast } from "@/hooks/use-toast";
 import { Upload, X, FileAudio, Loader2, CheckCircle2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 interface AudioUploaderProps {
   meetingId: Id<"meetings">;
   onUploadComplete?: () => void;
 }
 
-const ACCEPTED_TYPES = ["audio/mpeg", "audio/mp3", "audio/mp4", "audio/m4a", "audio/wav", "audio/x-wav"];
+// Extended MIME types for better compatibility
+const ACCEPTED_TYPES = [
+  "audio/mpeg", "audio/mp3",
+  "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/aac",
+  "audio/wav", "audio/x-wav", "audio/wave"
+];
+const ACCEPTED_EXTENSIONS = [".mp3", ".m4a", ".wav", ".aac"];
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
 export function AudioUploader({ meetingId, onUploadComplete }: AudioUploaderProps) {
-  const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -30,8 +34,13 @@ export function AudioUploader({ meetingId, onUploadComplete }: AudioUploaderProp
   const startTranscription = useMutation(api.meetings.startTranscription);
 
   const validateFile = (file: File): string | null => {
-    if (!ACCEPTED_TYPES.includes(file.type)) {
-      return "Ongeldig bestandstype. Gebruik MP3, M4A of WAV.";
+    // Check by extension as fallback (more reliable for m4a on macOS)
+    const extension = "." + file.name.split(".").pop()?.toLowerCase();
+    const hasValidExtension = ACCEPTED_EXTENSIONS.includes(extension);
+    const hasValidType = ACCEPTED_TYPES.includes(file.type);
+
+    if (!hasValidExtension && !hasValidType) {
+      return `Ongeldig bestandstype (${file.type || "onbekend"}). Gebruik MP3, M4A of WAV.`;
     }
     if (file.size > MAX_FILE_SIZE) {
       return "Bestand is te groot. Maximum is 100MB.";
@@ -52,29 +61,31 @@ export function AudioUploader({ meetingId, onUploadComplete }: AudioUploaderProp
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
+    setError(null);
 
     const file = e.dataTransfer.files[0];
     if (file) {
-      const error = validateFile(file);
-      if (error) {
-        toast({ title: "Fout", description: error, variant: "destructive" });
+      const validationError = validateFile(file);
+      if (validationError) {
+        setError(validationError);
         return;
       }
       setSelectedFile(file);
     }
-  }, [toast]);
+  }, []);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
     const file = e.target.files?.[0];
     if (file) {
-      const error = validateFile(file);
-      if (error) {
-        toast({ title: "Fout", description: error, variant: "destructive" });
+      const validationError = validateFile(file);
+      if (validationError) {
+        setError(validationError);
         return;
       }
       setSelectedFile(file);
     }
-  }, [toast]);
+  }, []);
 
   const handleUpload = async () => {
     if (!selectedFile) return;
@@ -135,24 +146,17 @@ export function AudioUploader({ meetingId, onUploadComplete }: AudioUploaderProp
 
       if (!transcribeResponse.ok) {
         const errorData = await transcribeResponse.json();
-        throw new Error(errorData.error || "Transcription failed");
+        console.error("Transcription API error:", errorData);
+        throw new Error(errorData.error || errorData.details || "Transcription failed");
       }
 
       setUploadStatus("complete");
-      toast({
-        title: "Upload geslaagd",
-        description: "Audio wordt nu getranscribeerd. Dit kan enkele minuten duren.",
-      });
-
       onUploadComplete?.();
-    } catch (error) {
-      console.error("Upload error:", error);
+    } catch (err) {
+      console.error("Upload error:", err);
       setUploadStatus("error");
-      toast({
-        title: "Upload mislukt",
-        description: "Er is iets misgegaan bij het uploaden. Probeer het opnieuw.",
-        variant: "destructive",
-      });
+      const errorMsg = err instanceof Error ? err.message : "Onbekende fout";
+      setError(`Fout: ${errorMsg}`);
     }
   };
 
@@ -160,6 +164,7 @@ export function AudioUploader({ meetingId, onUploadComplete }: AudioUploaderProp
     setSelectedFile(null);
     setUploadStatus("idle");
     setUploadProgress(0);
+    setError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -243,37 +248,43 @@ export function AudioUploader({ meetingId, onUploadComplete }: AudioUploaderProp
 
   // Show drop zone
   return (
-    <div
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      className={cn(
-        "border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer",
-        isDragging
-          ? "border-primary bg-primary/5"
-          : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
+    <div className="space-y-4">
+      {error && (
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+          {error}
+        </div>
       )}
-      onClick={() => fileInputRef.current?.click()}
-    >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".mp3,.m4a,.wav,audio/mpeg,audio/mp4,audio/wav"
-        onChange={handleFileSelect}
-        className="hidden"
-      />
-      <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
-      <h3 className="font-medium mb-1">Upload audio bestand</h3>
-      <p className="text-sm text-muted-foreground mb-4">
-        Sleep een bestand hierheen of klik om te uploaden
-      </p>
-      <Button variant="outline" type="button">
-        <Upload className="mr-2 h-4 w-4" />
-        Bestand selecteren
-      </Button>
-      <p className="text-xs text-muted-foreground mt-2">
-        MP3, M4A of WAV (max. 100MB)
-      </p>
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+          isDragging
+            ? "border-primary bg-primary/5"
+            : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
+        }`}
+        onClick={() => fileInputRef.current?.click()}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".mp3,.m4a,.wav,.aac"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
+        <h3 className="font-medium mb-1">Upload audio bestand</h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          Sleep een bestand hierheen of klik om te uploaden
+        </p>
+        <Button variant="outline" type="button">
+          <Upload className="mr-2 h-4 w-4" />
+          Bestand selecteren
+        </Button>
+        <p className="text-xs text-muted-foreground mt-2">
+          MP3, M4A of WAV (max. 100MB)
+        </p>
+      </div>
     </div>
   );
 }

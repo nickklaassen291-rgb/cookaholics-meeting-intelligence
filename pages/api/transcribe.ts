@@ -58,9 +58,11 @@ export default async function handler(
     const audioBlob = await audioResponse.blob();
 
     // Check if OpenAI API key is configured
-    if (!process.env.OPENAI_API_KEY) {
-      // For development without API key, return a placeholder
-      console.warn("OPENAI_API_KEY not configured, using placeholder transcription");
+    // Use placeholder for testing (set USE_PLACEHOLDER_TRANSCRIPTION=true in .env.local)
+    const usePlaceholder = !process.env.OPENAI_API_KEY || process.env.USE_PLACEHOLDER_TRANSCRIPTION === "true";
+
+    if (usePlaceholder) {
+      console.warn("Using placeholder transcription (no API key or placeholder mode enabled)");
 
       await convex.mutation(api.meetings.updateTranscription, {
         meetingId: meetingId as Id<"meetings">,
@@ -128,9 +130,12 @@ export default async function handler(
       console.error("Failed to update transcription status");
     }
 
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("Full error:", error);
+
     return res.status(500).json({
-      error: "Transcription failed",
-      details: error instanceof Error ? error.message : "Unknown error",
+      error: errorMessage,
+      details: errorMessage,
     });
   }
 }

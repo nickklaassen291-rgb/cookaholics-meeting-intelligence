@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -18,33 +18,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useToast } from "@/hooks/use-toast";
-import { AudioUploader, AudioPlayer, TranscriptionDisplay } from "@/components/audio";
-import {
   ArrowLeft,
   CalendarDays,
   Clock,
   Users,
-  MoreVertical,
-  Edit,
-  Trash2,
+  Mic,
   FileText,
+  Loader2,
+  Sparkles,
   CheckSquare,
   AlertTriangle,
-  Mic,
-  Loader2,
+  Mail,
+  Send,
 } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { AudioUploader, AudioPlayer, TranscriptionDisplay } from "@/components/audio";
 
-// Status badge styling
 function StatusBadge({ status }: { status: string }) {
   const variants: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
     scheduled: "outline",
@@ -62,25 +53,81 @@ function StatusBadge({ status }: { status: string }) {
 export default function VergaderingDetailPage() {
   const router = useRouter();
   const { id } = router.query;
-  const { toast } = useToast();
-
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summarizeError, setSummarizeError] = useState<string | null>(null);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [emailAddress, setEmailAddress] = useState("");
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuccess, setEmailSuccess] = useState(false);
 
   const meeting = useQuery(
     api.meetings.getById,
     id ? { id: id as Id<"meetings"> } : "skip"
   );
-  const departments = useQuery(api.departments.list, {});
-  const meetingTypes = useQuery(api.meetingTypes.list, {});
-  const users = useQuery(api.users.list, {});
+
   const actionItems = useQuery(
     api.actionItems.listByMeeting,
     meeting ? { meetingId: meeting._id } : "skip"
   );
 
-  const updateStatus = useMutation(api.meetings.updateStatus);
-  const deleteMeeting = useMutation(api.meetings.remove);
+  const handleSendEmail = async () => {
+    if (!meeting || !emailAddress) return;
+
+    setIsSendingEmail(true);
+    setEmailError(null);
+
+    try {
+      const response = await fetch("/api/send-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          meetingId: meeting._id,
+          recipientEmail: emailAddress,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Email verzenden mislukt");
+      }
+
+      setEmailSuccess(true);
+      setTimeout(() => {
+        setShowEmailDialog(false);
+        setEmailSuccess(false);
+        setEmailAddress("");
+      }, 2000);
+    } catch (err) {
+      setEmailError(err instanceof Error ? err.message : "Onbekende fout");
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const handleSummarize = async () => {
+    if (!meeting) return;
+
+    setIsSummarizing(true);
+    setSummarizeError(null);
+
+    try {
+      const response = await fetch("/api/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meetingId: meeting._id }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Samenvatting maken mislukt");
+      }
+    } catch (err) {
+      setSummarizeError(err instanceof Error ? err.message : "Onbekende fout");
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
 
   if (!meeting) {
     return (
@@ -92,130 +139,32 @@ export default function VergaderingDetailPage() {
     );
   }
 
-  const meetingType = meetingTypes?.find((t) => t._id === meeting.meetingTypeId);
-  const meetingDepartments = departments?.filter((d) =>
-    meeting.departmentIds.includes(d._id)
-  );
-  const attendees = users?.filter((u) => meeting.attendeeIds.includes(u._id));
-  const presentAttendees = meeting.presentAttendeeIds || [];
-
-  const handleStatusChange = async (newStatus: "scheduled" | "completed" | "cancelled") => {
-    try {
-      await updateStatus({
-        id: meeting._id,
-        status: newStatus,
-        presentAttendeeIds: newStatus === "completed" ? presentAttendees as Id<"users">[] : undefined,
-      });
-      toast({
-        title: "Status bijgewerkt",
-        description: `Vergadering is nu ${newStatus === "scheduled" ? "gepland" : newStatus === "completed" ? "afgerond" : "geannuleerd"}`,
-      });
-    } catch {
-      toast({
-        title: "Fout",
-        description: "Kon status niet bijwerken",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleDelete = async () => {
-    setIsDeleting(true);
-    try {
-      await deleteMeeting({ id: meeting._id });
-      toast({
-        title: "Vergadering verwijderd",
-        description: "De vergadering is succesvol verwijderd",
-      });
-      router.push("/vergaderingen");
-    } catch {
-      toast({
-        title: "Fout",
-        description: "Kon vergadering niet verwijderen",
-        variant: "destructive",
-      });
-    } finally {
-      setIsDeleting(false);
-      setShowDeleteDialog(false);
-    }
-  };
-
-  const toggleAttendeePresence = (userId: Id<"users">) => {
-    // Toggle presence for the given user
-    const isPresent = presentAttendees.includes(userId);
-    const newPresent = isPresent
-      ? presentAttendees.filter((id) => id !== userId)
-      : [...presentAttendees, userId];
-
-    // Update meeting with new present attendees
-    updateStatus({
-      id: meeting._id,
-      status: meeting.status as "scheduled" | "completed" | "cancelled",
-      presentAttendeeIds: newPresent,
-    });
-  };
-
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="p-6 space-y-6">
         {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-4">
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/vergaderingen">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold tracking-tight">{meeting.title}</h1>
-                <StatusBadge status={meeting.status} />
-              </div>
-              <div className="flex items-center gap-4 mt-2 text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <CalendarDays className="h-4 w-4" />
-                  {format(new Date(meeting.date), "EEEE d MMMM yyyy", { locale: nl })}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
-                  {format(new Date(meeting.date), "HH:mm", { locale: nl })} - {meeting.duration} min
-                </span>
-              </div>
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/vergaderingen">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold">{meeting.title}</h1>
+              <StatusBadge status={meeting.status} />
+            </div>
+            <div className="flex items-center gap-4 mt-2 text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <CalendarDays className="h-4 w-4" />
+                {format(new Date(meeting.date), "EEEE d MMMM yyyy", { locale: nl })}
+              </span>
+              <span className="flex items-center gap-1">
+                <Clock className="h-4 w-4" />
+                {format(new Date(meeting.date), "HH:mm", { locale: nl })} - {meeting.duration} min
+              </span>
             </div>
           </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleStatusChange("scheduled")}>
-                Markeer als gepland
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleStatusChange("completed")}>
-                Markeer als afgerond
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleStatusChange("cancelled")}>
-                Markeer als geannuleerd
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href={`/vergaderingen/${meeting._id}/bewerken`}>
-                  <Edit className="mr-2 h-4 w-4" />
-                  Bewerken
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={() => setShowDeleteDialog(true)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Verwijderen
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -230,8 +179,8 @@ export default function VergaderingDetailPage() {
                 </CardTitle>
                 <CardDescription>
                   {meeting.audioFileId
-                    ? "Beluister de audio-opname van deze vergadering"
-                    : "Upload de audio-opname van deze vergadering"}
+                    ? "Beluister de audio-opname"
+                    : "Upload de audio-opname"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -253,9 +202,6 @@ export default function VergaderingDetailPage() {
                   <FileText className="h-5 w-5" />
                   Transcriptie
                 </CardTitle>
-                <CardDescription>
-                  Automatisch gegenereerde transcriptie van de vergadering
-                </CardDescription>
               </CardHeader>
               <CardContent>
                 <TranscriptionDisplay
@@ -271,23 +217,60 @@ export default function VergaderingDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Samenvatting
+                  <Sparkles className="h-5 w-5" />
+                  AI Samenvatting
                 </CardTitle>
                 <CardDescription>
-                  AI-gegenereerde samenvatting van de vergadering
+                  Automatisch gegenereerde samenvatting door Claude AI
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                {summarizeError && (
+                  <div className="p-3 mb-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                    {summarizeError}
+                  </div>
+                )}
+
                 {meeting.summary ? (
-                  <div className="prose prose-sm max-w-none">
-                    <p className="whitespace-pre-wrap">{meeting.summary}</p>
+                  <div className="space-y-4">
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowEmailDialog(true)}
+                      >
+                        <Mail className="mr-2 h-4 w-4" />
+                        Verstuur per email
+                      </Button>
+                    </div>
+                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                      <p className="whitespace-pre-wrap">{meeting.summary}</p>
+                    </div>
+                  </div>
+                ) : meeting.transcription ? (
+                  <div className="text-center py-6">
+                    <Sparkles className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground mb-4">
+                      Genereer een AI samenvatting van de transcriptie
+                    </p>
+                    <Button onClick={handleSummarize} disabled={isSummarizing}>
+                      {isSummarizing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Bezig met analyseren...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="mr-2 h-4 w-4" />
+                          Genereer samenvatting
+                        </>
+                      )}
+                    </Button>
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-muted-foreground">
+                  <div className="text-center py-6 text-muted-foreground">
                     <FileText className="h-10 w-10 mx-auto mb-4 opacity-50" />
-                    <p>Nog geen samenvatting beschikbaar</p>
-                    <p className="text-sm">Wordt gegenereerd na transcriptie</p>
+                    <p>Upload eerst audio en wacht op transcriptie</p>
                   </div>
                 )}
               </CardContent>
@@ -301,7 +284,7 @@ export default function VergaderingDetailPage() {
                   Actiepunten
                 </CardTitle>
                 <CardDescription>
-                  Actiepunten uit deze vergadering
+                  Geëxtraheerde actiepunten uit de vergadering
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -312,7 +295,12 @@ export default function VergaderingDetailPage() {
                         key={item._id}
                         className="flex items-start gap-3 p-3 rounded-lg border"
                       >
-                        <Checkbox checked={item.status === "done"} />
+                        <input
+                          type="checkbox"
+                          checked={item.status === "done"}
+                          readOnly
+                          className="mt-1 h-4 w-4"
+                        />
                         <div className="flex-1">
                           <p className="font-medium">{item.description}</p>
                           <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
@@ -326,27 +314,23 @@ export default function VergaderingDetailPage() {
                         </div>
                         <Badge
                           variant={
-                            item.status === "done"
-                              ? "secondary"
-                              : item.status === "in_progress"
+                            item.priority === "high"
+                              ? "destructive"
+                              : item.priority === "medium"
                               ? "default"
-                              : "outline"
+                              : "secondary"
                           }
                         >
-                          {item.status === "done"
-                            ? "Afgerond"
-                            : item.status === "in_progress"
-                            ? "Bezig"
-                            : "Open"}
+                          {item.priority === "high" ? "Hoog" : item.priority === "medium" ? "Medium" : "Laag"}
                         </Badge>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-muted-foreground">
+                  <div className="text-center py-6 text-muted-foreground">
                     <CheckSquare className="h-10 w-10 mx-auto mb-4 opacity-50" />
                     <p>Nog geen actiepunten</p>
-                    <p className="text-sm">Worden geëxtraheerd na transcriptie</p>
+                    <p className="text-sm">Worden geëxtraheerd bij het genereren van de samenvatting</p>
                   </div>
                 )}
               </CardContent>
@@ -354,14 +338,14 @@ export default function VergaderingDetailPage() {
 
             {/* Red Flags Section */}
             {meeting.redFlags && meeting.redFlags.length > 0 && (
-              <Card className="border-destructive">
+              <Card className="border-destructive/50">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-destructive">
                     <AlertTriangle className="h-5 w-5" />
                     Rode vlaggen
                   </CardTitle>
                   <CardDescription>
-                    Gedetecteerde escalaties en aandachtspunten
+                    Gedetecteerde aandachtspunten en escalaties
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -372,7 +356,7 @@ export default function VergaderingDetailPage() {
                         className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10"
                       >
                         <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
-                        <div>
+                        <div className="flex-1">
                           <p className="font-medium">{flag.type}</p>
                           <p className="text-sm text-muted-foreground">{flag.description}</p>
                         </div>
@@ -386,96 +370,90 @@ export default function VergaderingDetailPage() {
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Meeting Info */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Type</p>
-                  <p>{meetingType?.name || "Onbekend"}</p>
-                </div>
-                <Separator />
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Afdeling(en)</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {meetingDepartments?.map((dept) => (
-                      <Badge key={dept._id} variant="secondary">
-                        {dept.name}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <Separator />
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Aangemaakt</p>
-                  <p>{format(new Date(meeting.createdAt), "d MMMM yyyy", { locale: nl })}</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Attendees */}
+          <div>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
                   Deelnemers
                 </CardTitle>
-                <CardDescription>
-                  {attendees?.length || 0} uitgenodigd
-                </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  {attendees?.map((user) => (
-                    <div
-                      key={user._id}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted"
-                    >
-                      <Checkbox
-                        checked={presentAttendees.includes(user._id)}
-                        onCheckedChange={() => toggleAttendeePresence(user._id)}
-                      />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{user.name}</p>
-                        <p className="text-xs text-muted-foreground">{user.email}</p>
-                      </div>
-                    </div>
-                  ))}
-                  {(!attendees || attendees.length === 0) && (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      Geen deelnemers toegevoegd
-                    </p>
-                  )}
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  {meeting.attendeeIds.length} deelnemer(s)
+                </p>
               </CardContent>
             </Card>
           </div>
         </div>
-
-        {/* Delete Dialog */}
-        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Vergadering verwijderen?</DialogTitle>
-              <DialogDescription>
-                Weet je zeker dat je deze vergadering wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
-                Annuleren
-              </Button>
-              <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Verwijderen
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
+
+      {/* Email Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Samenvatting versturen</DialogTitle>
+            <DialogDescription>
+              Verstuur de samenvatting en actiepunten per email
+            </DialogDescription>
+          </DialogHeader>
+
+          {emailSuccess ? (
+            <div className="py-8 text-center">
+              <div className="h-12 w-12 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
+                <Send className="h-6 w-6 text-green-600" />
+              </div>
+              <p className="font-medium text-green-600">Email verzonden!</p>
+            </div>
+          ) : (
+            <>
+              {emailError && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                  {emailError}
+                </div>
+              )}
+
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email adres</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="naam@voorbeeld.nl"
+                    value={emailAddress}
+                    onChange={(e) => setEmailAddress(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowEmailDialog(false)}
+                >
+                  Annuleren
+                </Button>
+                <Button
+                  onClick={handleSendEmail}
+                  disabled={!emailAddress || isSendingEmail}
+                >
+                  {isSendingEmail ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Verzenden...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-4 w-4" />
+                      Verzenden
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

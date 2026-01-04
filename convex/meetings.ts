@@ -260,3 +260,23 @@ export const retryTranscription = mutation({
     });
   },
 });
+
+// Update summary and red flags
+export const updateSummary = mutation({
+  args: {
+    meetingId: v.id("meetings"),
+    summary: v.string(),
+    redFlags: v.optional(v.array(v.object({
+      type: v.string(),
+      description: v.string(),
+      severity: v.string(),
+    }))),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.meetingId, {
+      summary: args.summary,
+      redFlags: args.redFlags,
+      updatedAt: Date.now(),
+    });
+  },
+});

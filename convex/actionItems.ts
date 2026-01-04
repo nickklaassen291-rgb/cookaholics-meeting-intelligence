@@ -98,6 +98,7 @@ export const create = mutation({
     ownerId: v.optional(v.id("users")),
     ownerName: v.optional(v.string()),
     deadline: v.optional(v.number()),
+    priority: v.optional(v.union(v.literal("high"), v.literal("medium"), v.literal("low"))),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -108,6 +109,7 @@ export const create = mutation({
       ownerId: args.ownerId,
       ownerName: args.ownerName,
       deadline: args.deadline,
+      priority: args.priority || "medium",
       status: "open",
       createdAt: now,
       updatedAt: now,
