@@ -57,37 +57,27 @@ export default async function handler(
 
     const audioBlob = await audioResponse.blob();
 
-    // Check if OpenAI API key is configured
-    // Use placeholder for testing (set USE_PLACEHOLDER_TRANSCRIPTION=true in .env.local)
-    const usePlaceholder = !process.env.OPENAI_API_KEY || process.env.USE_PLACEHOLDER_TRANSCRIPTION === "true";
-
-    if (usePlaceholder) {
-      console.warn("Using placeholder transcription (no API key or placeholder mode enabled)");
-
-      await convex.mutation(api.meetings.updateTranscription, {
+    // Check if Groq API key is configured
+    if (!process.env.GROQ_API_KEY) {
+      await convex.mutation(api.meetings.failTranscription, {
         meetingId: meetingId as Id<"meetings">,
-        transcription: "[Transcriptie placeholder - configureer OPENAI_API_KEY voor echte transcriptie]\n\nDit is een placeholder transcriptie. In productie wordt dit vervangen door de echte transcriptie via OpenAI Whisper.",
-        status: "completed",
+        error: "GROQ_API_KEY not configured",
       });
-
-      return res.status(200).json({
-        success: true,
-        message: "Placeholder transcription saved (no API key configured)",
-      });
+      return res.status(500).json({ error: "Groq API key not configured" });
     }
 
-    // Create form data for Whisper API
+    // Create form data for Groq Whisper API
     const formData = new FormData();
     formData.append("file", audioBlob, meeting.audioFileName || "audio.mp3");
-    formData.append("model", "whisper-1");
+    formData.append("model", "whisper-large-v3");
     formData.append("language", "nl"); // Dutch language
     formData.append("response_format", "text");
 
-    // Call OpenAI Whisper API
-    const whisperResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    // Call Groq Whisper API
+    const whisperResponse = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: formData,
     });
