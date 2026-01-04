@@ -131,7 +131,10 @@ ${meeting.transcription}`,
     await convex.mutation(api.meetings.updateSummary, {
       meetingId: meetingId as Id<"meetings">,
       summary,
-      redFlags,
+      redFlags: redFlags.map(flag => ({
+        ...flag,
+        severity: (["low", "medium", "high"].includes(flag.severity) ? flag.severity : "medium") as "low" | "medium" | "high",
+      })),
     });
 
     // Create action items

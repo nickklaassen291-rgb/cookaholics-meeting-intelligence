@@ -269,7 +269,7 @@ export const updateSummary = mutation({
     redFlags: v.optional(v.array(v.object({
       type: v.string(),
       description: v.string(),
-      severity: v.string(),
+      severity: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
     }))),
   },
   handler: async (ctx, args) => {
