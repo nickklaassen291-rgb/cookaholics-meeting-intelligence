@@ -30,6 +30,8 @@ import {
   AlertTriangle,
   Mail,
   Send,
+  ScrollText,
+  Printer,
 } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -56,6 +58,7 @@ export default function VergaderingDetailPage() {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summarizeError, setSummarizeError] = useState<string | null>(null);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [showScriptDialog, setShowScriptDialog] = useState(false);
   const [emailAddress, setEmailAddress] = useState("");
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -70,6 +73,57 @@ export default function VergaderingDetailPage() {
     api.actionItems.listByMeeting,
     meeting ? { meetingId: meeting._id } : "skip"
   );
+
+  const meetingScript = useQuery(
+    api.meetingScripts.getDefaultByMeetingType,
+    meeting?.meetingTypeId ? { meetingTypeId: meeting.meetingTypeId } : "skip"
+  );
+
+  const handlePrintScript = () => {
+    const printWindow = window.open("", "_blank");
+    if (printWindow && meetingScript) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Vergaderscript - ${meeting?.title}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+            h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }
+            .section { margin: 24px 0; page-break-inside: avoid; }
+            .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+            .section-number { background: #333; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+            .section-title { font-weight: bold; font-size: 18px; }
+            .section-description { color: #666; margin-bottom: 12px; }
+            .phrases { border-left: 3px solid #ddd; padding-left: 16px; }
+            .phrase { font-style: italic; color: #444; margin: 8px 0; }
+            @media print { body { padding: 20px; } }
+          </style>
+        </head>
+        <body>
+          <h1>${meetingScript.name}</h1>
+          <p style="color: #666;">Vergadering: ${meeting?.title}</p>
+          ${meetingScript.sections.map(section => `
+            <div class="section">
+              <div class="section-header">
+                <div class="section-number">${section.order}</div>
+                <div class="section-title">${section.title}</div>
+              </div>
+              <div class="section-description">${section.description}</div>
+              ${section.samplePhrases && section.samplePhrases.length > 0 ? `
+                <div class="phrases">
+                  ${section.samplePhrases.map(phrase => `<div class="phrase">"${phrase}"</div>`).join("")}
+                </div>
+              ` : ""}
+            </div>
+          `).join("")}
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
+  };
 
   const handleSendEmail = async () => {
     if (!meeting || !emailAddress) return;
@@ -370,7 +424,57 @@ export default function VergaderingDetailPage() {
           </div>
 
           {/* Sidebar */}
-          <div>
+          <div className="space-y-6">
+            {/* Meeting Script Card */}
+            {meetingScript && (
+              <Card className="border-primary/50">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2">
+                    <ScrollText className="h-5 w-5 text-primary" />
+                    Vergaderscript
+                  </CardTitle>
+                  <CardDescription>
+                    Checklist voor de voorzitter
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 mb-4">
+                    {meetingScript.sections.slice(0, 3).map((section, index) => (
+                      <div key={index} className="flex items-center gap-2 text-sm">
+                        <div className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">
+                          {section.order}
+                        </div>
+                        <span>{section.title}</span>
+                      </div>
+                    ))}
+                    {meetingScript.sections.length > 3 && (
+                      <p className="text-xs text-muted-foreground pl-7">
+                        +{meetingScript.sections.length - 3} meer...
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setShowScriptDialog(true)}
+                    >
+                      Bekijken
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handlePrintScript}
+                    >
+                      <Printer className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Participants Card */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -452,6 +556,58 @@ export default function VergaderingDetailPage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Script Dialog */}
+      <Dialog open={showScriptDialog} onOpenChange={setShowScriptDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ScrollText className="h-5 w-5" />
+              Vergaderscript
+            </DialogTitle>
+            <DialogDescription>
+              Checklist voor de voorzitter - {meeting?.title}
+            </DialogDescription>
+          </DialogHeader>
+
+          {meetingScript && (
+            <div className="space-y-6 py-4">
+              {meetingScript.sections.map((section, index) => (
+                <div key={index} className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground font-bold">
+                      {section.order}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">{section.title}</h3>
+                      <p className="text-sm text-muted-foreground">{section.description}</p>
+                    </div>
+                  </div>
+                  {section.samplePhrases && section.samplePhrases.length > 0 && (
+                    <div className="pl-11 space-y-1">
+                      {section.samplePhrases.map((phrase, i) => (
+                        <p key={i} className="text-sm italic text-muted-foreground border-l-2 border-primary/20 pl-3 py-1">
+                          &ldquo;{phrase}&rdquo;
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowScriptDialog(false)}>
+              Sluiten
+            </Button>
+            <Button onClick={handlePrintScript}>
+              <Printer className="mr-2 h-4 w-4" />
+              Afdrukken
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Layout>

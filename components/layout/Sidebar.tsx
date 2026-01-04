@@ -68,6 +68,11 @@ const departmentNavItems: NavItem[] = [
 
 const adminNavItems: NavItem[] = [
   {
+    href: "/admin/scripts",
+    label: "Scripts",
+    icon: <FileText className="h-4 w-4" />,
+  },
+  {
     href: "/admin/gebruikers",
     label: "Gebruikers",
     icon: <Users className="h-4 w-4" />,

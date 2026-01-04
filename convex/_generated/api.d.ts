@@ -10,6 +10,7 @@
 
 import type * as actionItems from "../actionItems.js";
 import type * as departments from "../departments.js";
+import type * as meetingScripts from "../meetingScripts.js";
 import type * as meetingTypes from "../meetingTypes.js";
 import type * as meetings from "../meetings.js";
 import type * as reports from "../reports.js";
@@ -24,6 +25,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   actionItems: typeof actionItems;
   departments: typeof departments;
+  meetingScripts: typeof meetingScripts;
   meetingTypes: typeof meetingTypes;
   meetings: typeof meetings;
   reports: typeof reports;
