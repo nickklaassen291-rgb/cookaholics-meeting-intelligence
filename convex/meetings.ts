@@ -229,6 +229,168 @@ export const updateTranscription = mutation({
   },
 });
 
+// Get today's meetings
+export const listToday = query({
+  args: {
+    departmentId: v.optional(v.id("departments")),
+  },
+  handler: async (ctx, args) => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+
+    const meetings = await ctx.db
+      .query("meetings")
+      .withIndex("by_date")
+      .filter((q) =>
+        q.and(
+          q.gte(q.field("date"), todayStart),
+          q.lte(q.field("date"), todayEnd)
+        )
+      )
+      .collect();
+
+    if (args.departmentId) {
+      return meetings.filter((m) =>
+        m.departmentIds.includes(args.departmentId!)
+      );
+    }
+
+    return meetings;
+  },
+});
+
+// Get this week's meetings
+export const listThisWeek = query({
+  args: {
+    departmentId: v.optional(v.id("departments")),
+  },
+  handler: async (ctx, args) => {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset).getTime();
+    const weekEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset + 6, 23, 59, 59, 999).getTime();
+
+    const meetings = await ctx.db
+      .query("meetings")
+      .withIndex("by_date")
+      .filter((q) =>
+        q.and(
+          q.gte(q.field("date"), weekStart),
+          q.lte(q.field("date"), weekEnd)
+        )
+      )
+      .collect();
+
+    if (args.departmentId) {
+      return meetings.filter((m) =>
+        m.departmentIds.includes(args.departmentId!)
+      );
+    }
+
+    return meetings;
+  },
+});
+
+// Get meetings with red flags (for MT dashboard)
+export const listWithRedFlags = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const meetings = await ctx.db
+      .query("meetings")
+      .order("desc")
+      .collect();
+
+    let filtered = meetings.filter(
+      (m) => m.redFlags && m.redFlags.length > 0
+    );
+
+    if (args.limit) {
+      filtered = filtered.slice(0, args.limit);
+    }
+
+    return filtered;
+  },
+});
+
+// Get recent activity (completed meetings with summaries)
+export const listRecentActivity = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const meetings = await ctx.db
+      .query("meetings")
+      .order("desc")
+      .collect();
+
+    // Get meetings that have been processed (have transcription or summary)
+    let processed = meetings.filter(
+      (m) => m.transcription || m.summary
+    );
+
+    if (args.limit) {
+      processed = processed.slice(0, args.limit);
+    }
+
+    return processed;
+  },
+});
+
+// Get department stats
+export const getDepartmentStats = query({
+  args: {
+    departmentId: v.id("departments"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    // Get all meetings for this department
+    const allMeetings = await ctx.db.query("meetings").collect();
+    const deptMeetings = allMeetings.filter((m) =>
+      m.departmentIds.includes(args.departmentId)
+    );
+
+    // This week's meetings
+    const dayOfWeek = new Date().getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() + mondayOffset);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const thisWeekMeetings = deptMeetings.filter(
+      (m) => m.date >= weekStart.getTime() && m.date <= weekEnd.getTime()
+    );
+
+    // Get action items
+    const allActionItems = await ctx.db.query("actionItems").collect();
+    const meetingIds = new Set(deptMeetings.map((m) => m._id));
+    const deptActionItems = allActionItems.filter((ai) =>
+      meetingIds.has(ai.meetingId)
+    );
+
+    const openItems = deptActionItems.filter((ai) => ai.status !== "done");
+    const overdueItems = deptActionItems.filter(
+      (ai) => ai.status !== "done" && ai.deadline && ai.deadline < now
+    );
+
+    return {
+      totalMeetings: deptMeetings.length,
+      thisWeekMeetings: thisWeekMeetings.length,
+      completedMeetings: deptMeetings.filter((m) => m.status === "completed").length,
+      openActionItems: openItems.length,
+      overdueActionItems: overdueItems.length,
+    };
+  },
+});
+
 // Mark transcription as failed
 export const failTranscription = mutation({
   args: {
