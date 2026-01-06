@@ -14,6 +14,7 @@ import type * as meetingScripts from "../meetingScripts.js";
 import type * as meetingTypes from "../meetingTypes.js";
 import type * as meetings from "../meetings.js";
 import type * as reports from "../reports.js";
+import type * as search from "../search.js";
 import type * as users from "../users.js";
 
 import type {
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   meetingTypes: typeof meetingTypes;
   meetings: typeof meetings;
   reports: typeof reports;
+  search: typeof search;
   users: typeof users;
 }>;
 

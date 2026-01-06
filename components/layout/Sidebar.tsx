@@ -7,6 +7,7 @@ import {
   FileText,
   Home,
   LayoutDashboard,
+  Search,
   Settings,
   Users,
   UserCheck,
@@ -46,6 +47,11 @@ const mainNavItems: NavItem[] = [
     href: "/rapportages",
     label: "Rapportages",
     icon: <FileText className="h-4 w-4" />,
+  },
+  {
+    href: "/zoeken",
+    label: "Zoeken",
+    icon: <Search className="h-4 w-4" />,
   },
 ];
 
