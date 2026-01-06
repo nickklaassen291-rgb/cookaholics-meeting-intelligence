@@ -13,6 +13,7 @@ import type * as departments from "../departments.js";
 import type * as meetingScripts from "../meetingScripts.js";
 import type * as meetingTypes from "../meetingTypes.js";
 import type * as meetings from "../meetings.js";
+import type * as notifications from "../notifications.js";
 import type * as reports from "../reports.js";
 import type * as search from "../search.js";
 import type * as users from "../users.js";
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   meetingScripts: typeof meetingScripts;
   meetingTypes: typeof meetingTypes;
   meetings: typeof meetings;
+  notifications: typeof notifications;
   reports: typeof reports;
   search: typeof search;
   users: typeof users;

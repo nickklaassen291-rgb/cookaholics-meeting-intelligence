@@ -2,6 +2,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { cn } from "@/lib/utils";
 import {
+  Bell,
   CalendarDays,
   CheckSquare,
   FileText,
@@ -52,6 +53,11 @@ const mainNavItems: NavItem[] = [
     href: "/zoeken",
     label: "Zoeken",
     icon: <Search className="h-4 w-4" />,
+  },
+  {
+    href: "/meldingen",
+    label: "Meldingen",
+    icon: <Bell className="h-4 w-4" />,
   },
 ];
 

@@ -2,9 +2,9 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { useUser, UserButton } from "@clerk/nextjs";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Bell, Menu, Search, Calendar, CheckSquare } from "lucide-react";
+import { Bell, Menu, Search, Calendar, CheckSquare, CheckCheck, FileText, Clock, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,8 +16,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { format, formatDistanceToNow as fnsFormatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
+
+// Helper to format relative time in Dutch
+function formatDistanceToNow(timestamp: number): string {
+  return fnsFormatDistanceToNow(new Date(timestamp), {
+    addSuffix: true,
+    locale: nl,
+  });
+}
 
 interface TopbarProps {
   onMenuClick?: () => void;
@@ -30,11 +38,81 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
+  // Get current user from Convex
+  const convexUser = useQuery(
+    api.users.getByClerkId,
+    user?.id ? { clerkId: user.id } : "skip"
+  );
+
+  // Get notifications for user
+  const notifications = useQuery(
+    api.notifications.listForUser,
+    convexUser?._id ? { userId: convexUser._id, limit: 5 } : "skip"
+  );
+
+  // Get unread count
+  const unreadCount = useQuery(
+    api.notifications.getUnreadCount,
+    convexUser?._id ? { userId: convexUser._id } : "skip"
+  );
+
+  // Mutations
+  const markAsRead = useMutation(api.notifications.markAsRead);
+  const markAllAsRead = useMutation(api.notifications.markAllAsRead);
+
   // Quick search results
   const quickResults = useQuery(
     api.search.quickSearch,
     searchQuery.length >= 2 ? { query: searchQuery } : "skip"
   );
+
+  // Handle notification click
+  const handleNotificationClick = async (notificationId: string, href: string) => {
+    await markAsRead({ notificationId: notificationId as any });
+    router.push(href);
+  };
+
+  // Handle mark all as read
+  const handleMarkAllAsRead = async () => {
+    if (convexUser?._id) {
+      await markAllAsRead({ userId: convexUser._id });
+    }
+  };
+
+  // Get notification icon
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case "action_item_assigned":
+        return <CheckSquare className="h-4 w-4 text-blue-500" />;
+      case "action_item_deadline":
+        return <Clock className="h-4 w-4 text-amber-500" />;
+      case "action_item_overdue":
+        return <AlertTriangle className="h-4 w-4 text-red-500" />;
+      case "meeting_scheduled":
+      case "meeting_reminder":
+        return <Calendar className="h-4 w-4 text-green-500" />;
+      case "transcription_completed":
+        return <FileText className="h-4 w-4 text-purple-500" />;
+      case "report_ready":
+        return <FileText className="h-4 w-4 text-indigo-500" />;
+      default:
+        return <Bell className="h-4 w-4" />;
+    }
+  };
+
+  // Get notification link
+  const getNotificationLink = (notification: any): string => {
+    if (notification.actionItem) {
+      return `/actiepunten/${notification.actionItem._id}`;
+    }
+    if (notification.meeting) {
+      return `/vergaderingen/${notification.meeting._id}`;
+    }
+    if (notification.report) {
+      return `/rapportages/${notification.report._id}`;
+    }
+    return "/meldingen";
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -169,39 +247,79 @@ export function Topbar({ onMenuClick }: TopbarProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5" />
-              <Badge
-                variant="destructive"
-                className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
-              >
-                3
-              </Badge>
+              {unreadCount !== undefined && unreadCount > 0 && (
+                <Badge
+                  variant="destructive"
+                  className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Badge>
+              )}
               <span className="sr-only">Meldingen</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel>Meldingen</DropdownMenuLabel>
+            <div className="flex items-center justify-between px-2">
+              <DropdownMenuLabel>Meldingen</DropdownMenuLabel>
+              {unreadCount !== undefined && unreadCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto py-1 px-2 text-xs"
+                  onClick={handleMarkAllAsRead}
+                >
+                  <CheckCheck className="h-3 w-3 mr-1" />
+                  Alles gelezen
+                </Button>
+              )}
+            </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="flex flex-col items-start gap-1">
-              <span className="font-medium">Actiepunt deadline morgen</span>
-              <span className="text-xs text-muted-foreground">
-                Q4 marketing budget beoordelen
-              </span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex flex-col items-start gap-1">
-              <span className="font-medium">Nieuwe vergadering gepland</span>
-              <span className="text-xs text-muted-foreground">
-                Wekelijkse Sales Sync - Morgen om 10:00
-              </span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex flex-col items-start gap-1">
-              <span className="font-medium">Transcriptie voltooid</span>
-              <span className="text-xs text-muted-foreground">
-                Marketing Daily - 3 december
-              </span>
-            </DropdownMenuItem>
+            {!notifications || notifications.length === 0 ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                Geen meldingen
+              </div>
+            ) : (
+              notifications.map((notification) => (
+                <DropdownMenuItem
+                  key={String(notification._id)}
+                  className={`flex items-start gap-3 cursor-pointer ${
+                    !notification.read ? "bg-muted/50" : ""
+                  }`}
+                  onClick={() =>
+                    handleNotificationClick(
+                      String(notification._id),
+                      getNotificationLink(notification)
+                    )
+                  }
+                >
+                  <div className="mt-0.5">
+                    {getNotificationIcon(notification.type)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm ${!notification.read ? "font-medium" : ""}`}>
+                      {notification.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                      {notification.message}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {formatDistanceToNow(notification.createdAt)}
+                    </p>
+                  </div>
+                  {!notification.read && (
+                    <div className="w-2 h-2 rounded-full bg-primary mt-1.5" />
+                  )}
+                </DropdownMenuItem>
+              ))
+            )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-center text-sm text-primary">
-              Alle meldingen bekijken
+            <DropdownMenuItem asChild>
+              <Link
+                href="/meldingen"
+                className="w-full text-center text-sm text-primary justify-center"
+              >
+                Alle meldingen bekijken
+              </Link>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

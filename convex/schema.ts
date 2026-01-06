@@ -160,4 +160,51 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_meeting_type", ["meetingTypeId"]),
+
+  // Notifications
+  notifications: defineTable({
+    userId: v.id("users"),
+    type: v.union(
+      v.literal("action_item_assigned"),
+      v.literal("action_item_deadline"),
+      v.literal("action_item_overdue"),
+      v.literal("meeting_scheduled"),
+      v.literal("meeting_reminder"),
+      v.literal("transcription_completed"),
+      v.literal("report_ready")
+    ),
+    title: v.string(),
+    message: v.string(),
+    // Related entities
+    actionItemId: v.optional(v.id("actionItems")),
+    meetingId: v.optional(v.id("meetings")),
+    reportId: v.optional(v.id("reports")),
+    // Status
+    read: v.boolean(),
+    emailSent: v.optional(v.boolean()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_read", ["userId", "read"])
+    .index("by_created", ["createdAt"]),
+
+  // User notification preferences
+  notificationPreferences: defineTable({
+    userId: v.id("users"),
+    // Email notifications
+    emailActionItemAssigned: v.boolean(),
+    emailActionItemDeadline: v.boolean(),
+    emailActionItemOverdue: v.boolean(),
+    emailMeetingReminder: v.boolean(),
+    emailWeeklyDigest: v.boolean(),
+    // In-app notifications
+    inAppActionItemAssigned: v.boolean(),
+    inAppActionItemDeadline: v.boolean(),
+    inAppActionItemOverdue: v.boolean(),
+    inAppMeetingReminder: v.boolean(),
+    // Timing
+    deadlineReminderDays: v.number(), // Days before deadline to send reminder
+    meetingReminderMinutes: v.number(), // Minutes before meeting to send reminder
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
 });
