@@ -39,6 +39,9 @@ import {
   UserCog,
   Check,
   Loader2,
+  UserPlus,
+  Copy,
+  Link,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
@@ -78,6 +81,13 @@ export default function AdminGebruikersPage() {
   const [newDepartmentId, setNewDepartmentId] = useState<Id<"departments"> | "">("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const inviteUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/sign-up`
+    : "";
 
   // Filter users
   const filteredUsers = users?.filter((user) => {
@@ -147,15 +157,31 @@ export default function AdminGebruikersPage() {
     members: users?.filter((u) => u.role === "member").length || 0,
   };
 
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
   return (
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold">Gebruikersbeheer</h1>
-          <p className="text-muted-foreground mt-1">
-            Beheer gebruikers, rollen en afdelingstoewijzingen
-          </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Gebruikersbeheer</h1>
+            <p className="text-muted-foreground mt-1">
+              Beheer gebruikers, rollen en afdelingstoewijzingen
+            </p>
+          </div>
+          <Button onClick={() => setShowInviteDialog(true)}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Uitnodigen
+          </Button>
         </div>
 
         {/* Stats */}
@@ -407,6 +433,66 @@ export default function AdminGebruikersPage() {
                   </>
                 ) : (
                   "Opslaan"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Invite User Dialog */}
+        <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Gebruiker uitnodigen</DialogTitle>
+              <DialogDescription>
+                Deel de uitnodigingslink met nieuwe teamleden
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Uitnodigingslink</label>
+                <div className="flex gap-2">
+                  <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
+                    <Link className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-sm truncate">{inviteUrl}</span>
+                  </div>
+                  <Button variant="outline" size="icon" onClick={copyToClipboard}>
+                    {copied ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-blue-50 p-4 space-y-2">
+                <p className="text-sm font-medium text-blue-900">Hoe het werkt:</p>
+                <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                  <li>Deel de link met je collega</li>
+                  <li>Zij maken een account aan</li>
+                  <li>Je ziet ze verschijnen in deze lijst</li>
+                  <li>Wijs de juiste rol en afdeling toe</li>
+                </ol>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowInviteDialog(false)}>
+                Sluiten
+              </Button>
+              <Button onClick={copyToClipboard}>
+                {copied ? (
+                  <>
+                    <Check className="h-4 w-4 mr-2" />
+                    Gekopieerd!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Kopieer link
+                  </>
                 )}
               </Button>
             </DialogFooter>
