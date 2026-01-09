@@ -184,7 +184,7 @@ export const registerCurrentUser = mutation({
       email: args.email || identity.email || "",
       name: args.name || identity.name || "Nieuwe Gebruiker",
       departmentId: mtDept._id,
-      role: "admin", // First user gets admin
+      role: "member", // New users get member role by default
       createdAt: now,
       updatedAt: now,
     });
