@@ -236,26 +236,8 @@
 
 ---
 
-## Task 8.0: Search & Discovery
-**Goal:** Doorzoek alle meeting content
 
-### 8.1 Full-Text Search
-- Search across transcriptions
-- Search across summaries
-- Search action items
-- Results with context snippets
 
-### 8.2 Search UI
-- Search bar in topbar
-- Search results page
-- Filter results by: type, date, department
-- Highlight matches
-
-### 8.3 AI-Powered Search (v1.1)
-- Natural language queries
-- "Wat hebben we besproken over X?"
-- "Alle besluiten over pricing"
-- Semantic search via embeddings
 
 ---
 

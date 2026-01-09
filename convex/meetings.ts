@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { requireAuth, getAuthenticatedUser, filterMeetingsByAccess, canAccessMeeting, isAdmin, isMT, AuthError } from "./lib/auth";
 
-// Get all meetings
+// Get all meetings (filtered by user access)
 export const list = query({
   args: {
     status: v.optional(v.union(
@@ -12,11 +13,19 @@ export const list = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Use graceful auth - return empty list if user not set up yet
+    const user = await getAuthenticatedUser(ctx);
+    if (!user) {
+      return [];
+    }
+
     const meetings = await ctx.db.query("meetings").order("desc").collect();
 
-    let filtered = meetings;
+    // Filter by user access (MT/admin sees all, others see own department)
+    let filtered = filterMeetingsByAccess(user, meetings);
+
     if (args.status) {
-      filtered = meetings.filter((m) => m.status === args.status);
+      filtered = filtered.filter((m) => m.status === args.status);
     }
 
     if (args.limit) {
@@ -27,7 +36,7 @@ export const list = query({
   },
 });
 
-// Get meetings by department
+// Get meetings by department (with access control)
 export const listByDepartment = query({
   args: {
     departmentId: v.id("departments"),
@@ -38,6 +47,16 @@ export const listByDepartment = query({
     )),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    // Check if user can access this department's data
+    if (!isAdmin(user) && !isMT(user) && user.departmentId !== args.departmentId) {
+      throw new AuthError(
+        "Je hebt geen toegang tot de vergaderingen van deze afdeling",
+        "FORBIDDEN"
+      );
+    }
+
     const meetings = await ctx.db.query("meetings").order("desc").collect();
 
     return meetings.filter((m) => {
@@ -48,13 +67,15 @@ export const listByDepartment = query({
   },
 });
 
-// Get upcoming meetings
+// Get upcoming meetings (with access control)
 export const listUpcoming = query({
   args: {
     departmentId: v.optional(v.id("departments")),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
     const now = Date.now();
     const meetings = await ctx.db
       .query("meetings")
@@ -66,10 +87,21 @@ export const listUpcoming = query({
       (m) => m.date >= now && m.status === "scheduled"
     );
 
+    // Apply department filter if specified
     if (args.departmentId) {
+      // Check access if filtering by specific department
+      if (!isAdmin(user) && !isMT(user) && user.departmentId !== args.departmentId) {
+        throw new AuthError(
+          "Je hebt geen toegang tot de vergaderingen van deze afdeling",
+          "FORBIDDEN"
+        );
+      }
       filtered = filtered.filter((m) =>
         m.departmentIds.includes(args.departmentId!)
       );
+    } else {
+      // If no department specified, filter by user access
+      filtered = filterMeetingsByAccess(user, filtered);
     }
 
     if (args.limit) {
@@ -80,15 +112,30 @@ export const listUpcoming = query({
   },
 });
 
-// Get meeting by ID
+// Get meeting by ID (with access control)
 export const getById = query({
   args: { id: v.id("meetings") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    const user = await requireAuth(ctx);
+
+    const meeting = await ctx.db.get(args.id);
+    if (!meeting) {
+      return null;
+    }
+
+    // Check if user can access this meeting
+    if (!canAccessMeeting(user, meeting.departmentIds)) {
+      throw new AuthError(
+        "Je hebt geen toegang tot deze vergadering",
+        "FORBIDDEN"
+      );
+    }
+
+    return meeting;
   },
 });
 
-// Create a new meeting
+// Create a new meeting (authenticated users only)
 export const create = mutation({
   args: {
     title: v.string(),
@@ -97,9 +144,21 @@ export const create = mutation({
     duration: v.number(),
     departmentIds: v.array(v.id("departments")),
     attendeeIds: v.array(v.id("users")),
-    createdById: v.id("users"),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    // Non-admin/MT users can only create meetings for their own department
+    if (!isAdmin(user) && !isMT(user)) {
+      const hasOwnDept = args.departmentIds.includes(user.departmentId);
+      if (!hasOwnDept) {
+        throw new AuthError(
+          "Je kunt alleen vergaderingen aanmaken voor je eigen afdeling",
+          "FORBIDDEN"
+        );
+      }
+    }
+
     const now = Date.now();
 
     return await ctx.db.insert("meetings", {
@@ -110,14 +169,14 @@ export const create = mutation({
       departmentIds: args.departmentIds,
       attendeeIds: args.attendeeIds,
       status: "scheduled",
-      createdById: args.createdById,
+      createdById: user._id,
       createdAt: now,
       updatedAt: now,
     });
   },
 });
 
-// Update meeting status
+// Update meeting status (with access control)
 export const updateStatus = mutation({
   args: {
     id: v.id("meetings"),
@@ -129,6 +188,21 @@ export const updateStatus = mutation({
     presentAttendeeIds: v.optional(v.array(v.id("users"))),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    const meeting = await ctx.db.get(args.id);
+    if (!meeting) {
+      throw new AuthError("Vergadering niet gevonden", "FORBIDDEN");
+    }
+
+    // Check if user can modify this meeting
+    if (!canAccessMeeting(user, meeting.departmentIds)) {
+      throw new AuthError(
+        "Je hebt geen toestemming om deze vergadering te wijzigen",
+        "FORBIDDEN"
+      );
+    }
+
     await ctx.db.patch(args.id, {
       status: args.status,
       presentAttendeeIds: args.presentAttendeeIds,
@@ -137,7 +211,7 @@ export const updateStatus = mutation({
   },
 });
 
-// Update meeting details
+// Update meeting details (with access control)
 export const update = mutation({
   args: {
     id: v.id("meetings"),
@@ -147,6 +221,21 @@ export const update = mutation({
     attendeeIds: v.optional(v.array(v.id("users"))),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    const meeting = await ctx.db.get(args.id);
+    if (!meeting) {
+      throw new AuthError("Vergadering niet gevonden", "FORBIDDEN");
+    }
+
+    // Check if user can modify this meeting
+    if (!canAccessMeeting(user, meeting.departmentIds)) {
+      throw new AuthError(
+        "Je hebt geen toestemming om deze vergadering te wijzigen",
+        "FORBIDDEN"
+      );
+    }
+
     const { id, ...updates } = args;
     const filteredUpdates = Object.fromEntries(
       Object.entries(updates).filter(([, val]) => val !== undefined)
@@ -159,23 +248,39 @@ export const update = mutation({
   },
 });
 
-// Delete meeting
+// Delete meeting (admin or creator only)
 export const remove = mutation({
   args: { id: v.id("meetings") },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    const meeting = await ctx.db.get(args.id);
+    if (!meeting) {
+      throw new AuthError("Vergadering niet gevonden", "FORBIDDEN");
+    }
+
+    // Only admin or creator can delete meetings
+    if (!isAdmin(user) && meeting.createdById !== user._id) {
+      throw new AuthError(
+        "Alleen de aanmaker of een admin kan deze vergadering verwijderen",
+        "FORBIDDEN"
+      );
+    }
+
     await ctx.db.delete(args.id);
   },
 });
 
-// Generate upload URL for audio file
+// Generate upload URL for audio file (authenticated users only)
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
+    await requireAuth(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });
 
-// Save audio file reference to meeting
+// Save audio file reference to meeting (with access control)
 export const saveAudioFile = mutation({
   args: {
     meetingId: v.id("meetings"),
@@ -183,6 +288,20 @@ export const saveAudioFile = mutation({
     fileName: v.string(),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    const meeting = await ctx.db.get(args.meetingId);
+    if (!meeting) {
+      throw new AuthError("Vergadering niet gevonden", "FORBIDDEN");
+    }
+
+    if (!canAccessMeeting(user, meeting.departmentIds)) {
+      throw new AuthError(
+        "Je hebt geen toestemming om een audio bestand aan deze vergadering toe te voegen",
+        "FORBIDDEN"
+      );
+    }
+
     await ctx.db.patch(args.meetingId, {
       audioFileId: args.storageId,
       audioFileName: args.fileName,
@@ -192,20 +311,35 @@ export const saveAudioFile = mutation({
   },
 });
 
-// Get audio URL
+// Get audio URL (with access control)
 export const getAudioUrl = query({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     return await ctx.storage.getUrl(args.storageId);
   },
 });
 
-// Start transcription process
+// Start transcription process (with access control)
 export const startTranscription = mutation({
   args: {
     meetingId: v.id("meetings"),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    const meeting = await ctx.db.get(args.meetingId);
+    if (!meeting) {
+      throw new AuthError("Vergadering niet gevonden", "FORBIDDEN");
+    }
+
+    if (!canAccessMeeting(user, meeting.departmentIds)) {
+      throw new AuthError(
+        "Je hebt geen toestemming om transcriptie te starten voor deze vergadering",
+        "FORBIDDEN"
+      );
+    }
+
     await ctx.db.patch(args.meetingId, {
       transcriptionStatus: "processing",
       updatedAt: Date.now(),
@@ -213,7 +347,7 @@ export const startTranscription = mutation({
   },
 });
 
-// Update transcription result
+// Update transcription result (internal/system use)
 export const updateTranscription = mutation({
   args: {
     meetingId: v.id("meetings"),
@@ -221,6 +355,8 @@ export const updateTranscription = mutation({
     status: v.union(v.literal("completed"), v.literal("failed")),
   },
   handler: async (ctx, args) => {
+    // This is called by the API route after transcription
+    // Authentication handled at API level
     await ctx.db.patch(args.meetingId, {
       transcription: args.transcription,
       transcriptionStatus: args.status,
@@ -229,12 +365,14 @@ export const updateTranscription = mutation({
   },
 });
 
-// Get today's meetings
+// Get today's meetings (with access control)
 export const listToday = query({
   args: {
     departmentId: v.optional(v.id("departments")),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
@@ -250,22 +388,34 @@ export const listToday = query({
       )
       .collect();
 
+    // Apply department filter
+    let filtered = meetings;
     if (args.departmentId) {
-      return meetings.filter((m) =>
+      if (!isAdmin(user) && !isMT(user) && user.departmentId !== args.departmentId) {
+        throw new AuthError(
+          "Je hebt geen toegang tot de vergaderingen van deze afdeling",
+          "FORBIDDEN"
+        );
+      }
+      filtered = meetings.filter((m) =>
         m.departmentIds.includes(args.departmentId!)
       );
+    } else {
+      filtered = filterMeetingsByAccess(user, meetings);
     }
 
-    return meetings;
+    return filtered;
   },
 });
 
-// Get this week's meetings
+// Get this week's meetings (with access control)
 export const listThisWeek = query({
   args: {
     departmentId: v.optional(v.id("departments")),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
     const now = new Date();
     const dayOfWeek = now.getDay();
     const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -284,22 +434,42 @@ export const listThisWeek = query({
       )
       .collect();
 
+    // Apply department filter
+    let filtered = meetings;
     if (args.departmentId) {
-      return meetings.filter((m) =>
+      if (!isAdmin(user) && !isMT(user) && user.departmentId !== args.departmentId) {
+        throw new AuthError(
+          "Je hebt geen toegang tot de vergaderingen van deze afdeling",
+          "FORBIDDEN"
+        );
+      }
+      filtered = meetings.filter((m) =>
         m.departmentIds.includes(args.departmentId!)
       );
+    } else {
+      filtered = filterMeetingsByAccess(user, meetings);
     }
 
-    return meetings;
+    return filtered;
   },
 });
 
-// Get meetings with red flags (for MT dashboard)
+// Get meetings with red flags (MT/Admin only)
 export const listWithRedFlags = query({
   args: {
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    // Only MT and admins can see red flags overview
+    if (!isAdmin(user) && !isMT(user)) {
+      throw new AuthError(
+        "Alleen MT en administrators kunnen de red flags overzicht zien",
+        "FORBIDDEN"
+      );
+    }
+
     const meetings = await ctx.db
       .query("meetings")
       .order("desc")
@@ -317,19 +487,24 @@ export const listWithRedFlags = query({
   },
 });
 
-// Get recent activity (completed meetings with summaries)
+// Get recent activity (with access control)
 export const listRecentActivity = query({
   args: {
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
     const meetings = await ctx.db
       .query("meetings")
       .order("desc")
       .collect();
 
+    // Filter by user access
+    const filtered = filterMeetingsByAccess(user, meetings);
+
     // Get meetings that have been processed (have transcription or summary)
-    let processed = meetings.filter(
+    let processed = filtered.filter(
       (m) => m.transcription || m.summary
     );
 
@@ -341,12 +516,22 @@ export const listRecentActivity = query({
   },
 });
 
-// Get department stats
+// Get department stats (with access control)
 export const getDepartmentStats = query({
   args: {
     departmentId: v.id("departments"),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    // Check if user can access this department's stats
+    if (!isAdmin(user) && !isMT(user) && user.departmentId !== args.departmentId) {
+      throw new AuthError(
+        "Je hebt geen toegang tot de statistieken van deze afdeling",
+        "FORBIDDEN"
+      );
+    }
+
     const now = Date.now();
 
     // Get all meetings for this department

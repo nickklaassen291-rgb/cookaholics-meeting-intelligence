@@ -56,7 +56,6 @@ export default function NieuweVergaderingPage() {
         duration,
         departmentIds: selectedDepartments as Id<"departments">[],
         attendeeIds: [firstUser._id],
-        createdById: firstUser._id,
       });
 
       router.push("/vergaderingen");

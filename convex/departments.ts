@@ -1,10 +1,12 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { requireAuth, requireAdmin } from "./lib/auth";
 
-// Get all departments
+// Get all departments (public for UI dropdowns)
 export const list = query({
   args: {},
   handler: async (ctx) => {
+    await requireAuth(ctx);
     return await ctx.db.query("departments").collect();
   },
 });
@@ -13,6 +15,7 @@ export const list = query({
 export const getBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     return await ctx.db
       .query("departments")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -24,6 +27,7 @@ export const getBySlug = query({
 export const getById = query({
   args: { id: v.id("departments") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     return await ctx.db.get(args.id);
   },
 });
@@ -36,6 +40,9 @@ export const create = mutation({
     description: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    requireAdmin(user);
+
     const departmentId = await ctx.db.insert("departments", {
       name: args.name,
       slug: args.slug,

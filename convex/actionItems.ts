@@ -1,10 +1,27 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { requireAuth, filterActionItemsByAccess, isAdmin, isMT, canModifyResource, AuthError } from "./lib/auth";
 
-// Get action items for a meeting
+// Get action items for a meeting (with access control)
 export const listByMeeting = query({
   args: { meetingId: v.id("meetings") },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    // Check if user can access this meeting
+    const meeting = await ctx.db.get(args.meetingId);
+    if (!meeting) {
+      return [];
+    }
+
+    // Check department access
+    if (!isAdmin(user) && !isMT(user) && !meeting.departmentIds.includes(user.departmentId)) {
+      throw new AuthError(
+        "Je hebt geen toegang tot de actiepunten van deze vergadering",
+        "FORBIDDEN"
+      );
+    }
+
     return await ctx.db
       .query("actionItems")
       .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
@@ -12,10 +29,20 @@ export const listByMeeting = query({
   },
 });
 
-// Get action items for a user
+// Get action items for a user (own items or admin/MT can see all)
 export const listByOwner = query({
   args: { ownerId: v.id("users") },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    // Users can see their own items, MT/admin can see all
+    if (!isAdmin(user) && !isMT(user) && user._id !== args.ownerId) {
+      throw new AuthError(
+        "Je kunt alleen je eigen actiepunten bekijken",
+        "FORBIDDEN"
+      );
+    }
+
     return await ctx.db
       .query("actionItems")
       .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
@@ -23,33 +50,51 @@ export const listByOwner = query({
   },
 });
 
-// Get action items by status
+// Get action items by status (filtered by access)
 export const listByStatus = query({
   args: {
     status: v.union(v.literal("open"), v.literal("in_progress"), v.literal("done")),
   },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const user = await requireAuth(ctx);
+
+    const items = await ctx.db
       .query("actionItems")
       .withIndex("by_status", (q) => q.eq("status", args.status))
       .collect();
+
+    // Filter by user access
+    return await filterActionItemsByAccess(ctx, user, items);
   },
 });
 
-// Get all open action items (for dashboard)
+// Get all open action items (for dashboard, with access control)
 export const listOpen = query({
   args: {
     ownerId: v.optional(v.id("users")),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
     let items = await ctx.db
       .query("actionItems")
       .withIndex("by_status", (q) => q.eq("status", "open"))
       .collect();
 
+    // Filter by owner if specified
     if (args.ownerId) {
+      // Check access - can only filter by own ID unless admin/MT
+      if (!isAdmin(user) && !isMT(user) && user._id !== args.ownerId) {
+        throw new AuthError(
+          "Je kunt alleen je eigen actiepunten bekijken",
+          "FORBIDDEN"
+        );
+      }
       items = items.filter((item) => item.ownerId === args.ownerId);
+    } else {
+      // Filter by access
+      items = await filterActionItemsByAccess(ctx, user, items);
     }
 
     // Sort by deadline (items without deadline at the end)
@@ -68,12 +113,14 @@ export const listOpen = query({
   },
 });
 
-// Get overdue action items
+// Get overdue action items (with access control)
 export const listOverdue = query({
   args: {
     ownerId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
     const now = Date.now();
     let items = await ctx.db
       .query("actionItems")
@@ -83,14 +130,23 @@ export const listOverdue = query({
     items = items.filter((item) => item.deadline && item.deadline < now);
 
     if (args.ownerId) {
+      // Check access
+      if (!isAdmin(user) && !isMT(user) && user._id !== args.ownerId) {
+        throw new AuthError(
+          "Je kunt alleen je eigen actiepunten bekijken",
+          "FORBIDDEN"
+        );
+      }
       items = items.filter((item) => item.ownerId === args.ownerId);
+    } else {
+      items = await filterActionItemsByAccess(ctx, user, items);
     }
 
     return items;
   },
 });
 
-// Create action item
+// Create action item (with access control)
 export const create = mutation({
   args: {
     meetingId: v.id("meetings"),
@@ -101,6 +157,21 @@ export const create = mutation({
     priority: v.optional(v.union(v.literal("high"), v.literal("medium"), v.literal("low"))),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    // Check if user can add action items to this meeting
+    const meeting = await ctx.db.get(args.meetingId);
+    if (!meeting) {
+      throw new AuthError("Vergadering niet gevonden", "FORBIDDEN");
+    }
+
+    if (!isAdmin(user) && !isMT(user) && !meeting.departmentIds.includes(user.departmentId)) {
+      throw new AuthError(
+        "Je hebt geen toestemming om actiepunten toe te voegen aan deze vergadering",
+        "FORBIDDEN"
+      );
+    }
+
     const now = Date.now();
 
     return await ctx.db.insert("actionItems", {
@@ -117,7 +188,7 @@ export const create = mutation({
   },
 });
 
-// Bulk create action items (from AI extraction)
+// Bulk create action items (from AI extraction, with access control)
 export const createBatch = mutation({
   args: {
     meetingId: v.id("meetings"),
@@ -131,6 +202,21 @@ export const createBatch = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    // Check meeting access
+    const meeting = await ctx.db.get(args.meetingId);
+    if (!meeting) {
+      throw new AuthError("Vergadering niet gevonden", "FORBIDDEN");
+    }
+
+    if (!isAdmin(user) && !isMT(user) && !meeting.departmentIds.includes(user.departmentId)) {
+      throw new AuthError(
+        "Je hebt geen toestemming om actiepunten toe te voegen aan deze vergadering",
+        "FORBIDDEN"
+      );
+    }
+
     const now = Date.now();
     const createdIds = [];
 
@@ -152,13 +238,28 @@ export const createBatch = mutation({
   },
 });
 
-// Update action item status
+// Update action item status (owner or admin can update)
 export const updateStatus = mutation({
   args: {
     id: v.id("actionItems"),
     status: v.union(v.literal("open"), v.literal("in_progress"), v.literal("done")),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    const item = await ctx.db.get(args.id);
+    if (!item) {
+      throw new AuthError("Actiepunt niet gevonden", "FORBIDDEN");
+    }
+
+    // Check if user can update this item
+    if (!canModifyResource(user, item.ownerId)) {
+      throw new AuthError(
+        "Je hebt geen toestemming om dit actiepunt te wijzigen",
+        "FORBIDDEN"
+      );
+    }
+
     const updates: Record<string, unknown> = {
       status: args.status,
       updatedAt: Date.now(),
@@ -172,7 +273,7 @@ export const updateStatus = mutation({
   },
 });
 
-// Update action item
+// Update action item (owner or admin can update)
 export const update = mutation({
   args: {
     id: v.id("actionItems"),
@@ -183,6 +284,21 @@ export const update = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    const item = await ctx.db.get(args.id);
+    if (!item) {
+      throw new AuthError("Actiepunt niet gevonden", "FORBIDDEN");
+    }
+
+    // Check if user can update this item
+    if (!canModifyResource(user, item.ownerId)) {
+      throw new AuthError(
+        "Je hebt geen toestemming om dit actiepunt te wijzigen",
+        "FORBIDDEN"
+      );
+    }
+
     const { id, ...updates } = args;
     const filteredUpdates = Object.fromEntries(
       Object.entries(updates).filter(([, val]) => val !== undefined)
@@ -195,15 +311,30 @@ export const update = mutation({
   },
 });
 
-// Delete action item
+// Delete action item (owner or admin only)
 export const remove = mutation({
   args: { id: v.id("actionItems") },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    const item = await ctx.db.get(args.id);
+    if (!item) {
+      throw new AuthError("Actiepunt niet gevonden", "FORBIDDEN");
+    }
+
+    // Only admin or owner can delete
+    if (!isAdmin(user) && item.ownerId !== user._id) {
+      throw new AuthError(
+        "Alleen de eigenaar of een admin kan dit actiepunt verwijderen",
+        "FORBIDDEN"
+      );
+    }
+
     await ctx.db.delete(args.id);
   },
 });
 
-// Get all action items with optional filters
+// Get all action items with optional filters (with access control)
 export const list = query({
   args: {
     status: v.optional(v.union(v.literal("open"), v.literal("in_progress"), v.literal("done"))),
@@ -213,7 +344,12 @@ export const list = query({
     includeOverdueOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
     let items = await ctx.db.query("actionItems").order("desc").collect();
+
+    // Filter by access first
+    items = await filterActionItemsByAccess(ctx, user, items);
 
     // Filter by status
     if (args.status) {
@@ -249,24 +385,56 @@ export const list = query({
   },
 });
 
-// Get action item by ID
+// Get action item by ID (with access control)
 export const getById = query({
   args: { id: v.id("actionItems") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    const user = await requireAuth(ctx);
+
+    const item = await ctx.db.get(args.id);
+    if (!item) {
+      return null;
+    }
+
+    // Check access via meeting
+    const meeting = await ctx.db.get(item.meetingId);
+    if (meeting && !isAdmin(user) && !isMT(user) && !meeting.departmentIds.includes(user.departmentId)) {
+      // Allow if user is the owner
+      if (item.ownerId !== user._id) {
+        throw new AuthError(
+          "Je hebt geen toegang tot dit actiepunt",
+          "FORBIDDEN"
+        );
+      }
+    }
+
+    return item;
   },
 });
 
-// Bulk update status
+// Bulk update status (with access control)
 export const bulkUpdateStatus = mutation({
   args: {
     ids: v.array(v.id("actionItems")),
     status: v.union(v.literal("open"), v.literal("in_progress"), v.literal("done")),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
     const now = Date.now();
 
     for (const id of args.ids) {
+      const item = await ctx.db.get(id);
+      if (!item) continue;
+
+      // Check if user can update this item
+      if (!canModifyResource(user, item.ownerId)) {
+        throw new AuthError(
+          `Je hebt geen toestemming om actiepunt te wijzigen`,
+          "FORBIDDEN"
+        );
+      }
+
       const updates: Record<string, unknown> = {
         status: args.status,
         updatedAt: now,

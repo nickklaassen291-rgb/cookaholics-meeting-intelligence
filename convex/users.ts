@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { requireAuth, requireAdmin, isAdmin, isMT, AuthError } from "./lib/auth";
 
-// Get user by Clerk ID
+// Get user by Clerk ID (public for auth flow)
 export const getByClerkId = query({
   args: { clerkId: v.string() },
   handler: async (ctx, args) => {
@@ -30,18 +31,37 @@ export const getCurrentUser = query({
   },
 });
 
-// Get all users
+// Get all users (MT/Admin can see all, others see own department)
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("users").collect();
+    const user = await requireAuth(ctx);
+    const allUsers = await ctx.db.query("users").collect();
+
+    // MT and admins can see all users
+    if (isAdmin(user) || isMT(user)) {
+      return allUsers;
+    }
+
+    // Others can only see users in their department
+    return allUsers.filter((u) => u.departmentId === user.departmentId);
   },
 });
 
-// Get users by department
+// Get users by department (with access control)
 export const listByDepartment = query({
   args: { departmentId: v.id("departments") },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    // Check if user can access this department's users
+    if (!isAdmin(user) && !isMT(user) && user.departmentId !== args.departmentId) {
+      throw new AuthError(
+        "Je hebt geen toegang tot de gebruikers van deze afdeling",
+        "FORBIDDEN"
+      );
+    }
+
     return await ctx.db
       .query("users")
       .withIndex("by_department", (q) => q.eq("departmentId", args.departmentId))
@@ -99,6 +119,9 @@ export const updateRole = mutation({
     role: v.union(v.literal("admin"), v.literal("department_head"), v.literal("member")),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireAuth(ctx);
+    requireAdmin(currentUser);
+
     await ctx.db.patch(args.userId, {
       role: args.role,
       updatedAt: Date.now(),
@@ -106,17 +129,67 @@ export const updateRole = mutation({
   },
 });
 
-// Update user department
+// Update user department (admin only)
 export const updateDepartment = mutation({
   args: {
     userId: v.id("users"),
     departmentId: v.id("departments"),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireAuth(ctx);
+    requireAdmin(currentUser);
+
     await ctx.db.patch(args.userId, {
       departmentId: args.departmentId,
       updatedAt: Date.now(),
     });
+  },
+});
+
+// Register current Clerk user in Convex (self-registration)
+export const registerCurrentUser = mutation({
+  args: {
+    name: v.string(),
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Niet ingelogd");
+    }
+
+    // Check if user already exists
+    const existingUser = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (existingUser) {
+      return { message: "User already exists", userId: existingUser._id };
+    }
+
+    // Get MT department as default for new users (admin can change later)
+    const mtDept = await ctx.db
+      .query("departments")
+      .withIndex("by_slug", (q) => q.eq("slug", "mt"))
+      .first();
+
+    if (!mtDept) {
+      throw new Error("MT afdeling niet gevonden. Run eerst departments:seed");
+    }
+
+    const now = Date.now();
+    const userId = await ctx.db.insert("users", {
+      clerkId: identity.subject,
+      email: args.email || identity.email || "",
+      name: args.name || identity.name || "Nieuwe Gebruiker",
+      departmentId: mtDept._id,
+      role: "admin", // First user gets admin
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return { message: "User created", userId };
   },
 });
 

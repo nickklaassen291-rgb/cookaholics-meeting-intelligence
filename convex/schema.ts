@@ -99,7 +99,10 @@ export default defineSchema({
   })
     .index("by_date", ["date"])
     .index("by_status", ["status"])
-    .index("by_created_by", ["createdById"]),
+    .index("by_created_by", ["createdById"])
+    .index("by_status_date", ["status", "date"]) // Composite index for filtered date queries
+    .index("by_transcription_status", ["transcriptionStatus"]) // For processing queue
+    .index("by_updated", ["updatedAt"]), // For recent activity sorting
 
   // Action items extracted from meetings
   actionItems: defineTable({
@@ -122,7 +125,10 @@ export default defineSchema({
     .index("by_meeting", ["meetingId"])
     .index("by_owner", ["ownerId"])
     .index("by_status", ["status"])
-    .index("by_deadline", ["deadline"]),
+    .index("by_deadline", ["deadline"])
+    .index("by_owner_status", ["ownerId", "status"]) // Composite for user's open items
+    .index("by_status_deadline", ["status", "deadline"]) // For overdue queries
+    .index("by_priority", ["priority"]), // For priority filtering
 
   // Generated reports
   reports: defineTable({

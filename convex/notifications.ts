@@ -10,7 +10,7 @@ export const listForUser = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    let notificationsQuery = ctx.db
+    const notificationsQuery = ctx.db
       .query("notifications")
       .withIndex("by_user", (q) => q.eq("userId", args.userId));
 
