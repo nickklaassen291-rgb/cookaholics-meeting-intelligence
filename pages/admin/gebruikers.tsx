@@ -6,6 +6,9 @@ import { Layout } from "@/components/layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useRouter } from "next/router";
+import { Loader2 as PageLoader } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -62,10 +65,13 @@ const roleBadgeVariants: Record<Role, "default" | "secondary" | "outline"> = {
 };
 
 export default function AdminGebruikersPage() {
+  const router = useRouter();
+  const currentUser = useQuery(api.users.getCurrentUser);
   const users = useQuery(api.users.list);
   const departments = useQuery(api.departments.list);
   const updateRole = useMutation(api.users.updateRole);
   const updateDepartment = useMutation(api.users.updateDepartment);
+  const updateMTStatus = useMutation(api.users.updateMTStatus);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDepartment, setFilterDepartment] = useState<string>("all");
@@ -76,15 +82,45 @@ export default function AdminGebruikersPage() {
     name: string;
     currentRole: Role;
     currentDepartmentId: Id<"departments">;
+    currentIsMT: boolean;
   } | null>(null);
   const [newRole, setNewRole] = useState<Role>("member");
   const [newDepartmentId, setNewDepartmentId] = useState<Id<"departments"> | "">("");
+  const [newIsMT, setNewIsMT] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [copied, setCopied] = useState(false);
   const [inviteDepartment, setInviteDepartment] = useState<string>("");
+
+  // Admin-only access check
+  if (currentUser === undefined) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <PageLoader className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (currentUser === null || currentUser.role !== "admin") {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center h-64 space-y-4">
+          <Shield className="h-16 w-16 text-muted-foreground" />
+          <h1 className="text-2xl font-bold">Geen toegang</h1>
+          <p className="text-muted-foreground">
+            Je hebt admin rechten nodig om deze pagina te bekijken.
+          </p>
+          <Button onClick={() => router.push("/dashboard")}>
+            Terug naar Dashboard
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
 
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const inviteUrl = inviteDepartment
@@ -113,15 +149,18 @@ export default function AdminGebruikersPage() {
     name: string;
     role: Role;
     departmentId: Id<"departments">;
+    isMT?: boolean;
   }) => {
     setEditingUser({
       id: user._id,
       name: user.name,
       currentRole: user.role,
       currentDepartmentId: user.departmentId,
+      currentIsMT: user.isMT || false,
     });
     setNewRole(user.role);
     setNewDepartmentId(user.departmentId);
+    setNewIsMT(user.isMT || false);
     setSaveSuccess(false);
   };
 
@@ -140,6 +179,10 @@ export default function AdminGebruikersPage() {
           userId: editingUser.id,
           departmentId: newDepartmentId as Id<"departments">,
         });
+      }
+      // Update MT status if changed
+      if (newIsMT !== editingUser.currentIsMT) {
+        await updateMTStatus({ userId: editingUser.id, isMT: newIsMT });
       }
       setSaveSuccess(true);
       setTimeout(() => {
@@ -315,6 +358,9 @@ export default function AdminGebruikersPage() {
                           <div className="flex items-center gap-2">
                             <Building2 className="h-3 w-3 text-muted-foreground" />
                             {getDepartmentName(user.departmentId)}
+                            {user.isMT && (
+                              <Badge variant="outline" className="text-xs">MT</Badge>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -340,6 +386,7 @@ export default function AdminGebruikersPage() {
                                 name: user.name,
                                 role: user.role as Role,
                                 departmentId: user.departmentId,
+                                isMT: user.isMT,
                               })
                             }
                           >
@@ -405,7 +452,7 @@ export default function AdminGebruikersPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {departments?.map((dept) => (
+                    {departments?.filter(d => d.slug !== "mt").map((dept) => (
                       <SelectItem key={dept._id} value={dept._id}>
                         <div className="flex items-center gap-2">
                           <Building2 className="h-4 w-4" />
@@ -416,6 +463,23 @@ export default function AdminGebruikersPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="flex items-center space-x-2 pt-2">
+                <Checkbox
+                  id="isMT"
+                  checked={newIsMT}
+                  onCheckedChange={(checked) => setNewIsMT(checked === true)}
+                />
+                <label
+                  htmlFor="isMT"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Ook lid van MT
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                MT-leden hebben toegang tot MT-vergaderingen en rapporten, naast hun eigen afdeling.
+              </p>
             </div>
 
             <DialogFooter>

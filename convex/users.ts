@@ -146,6 +146,23 @@ export const updateDepartment = mutation({
   },
 });
 
+// Update user MT status (admin only)
+export const updateMTStatus = mutation({
+  args: {
+    userId: v.id("users"),
+    isMT: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const currentUser = await requireAuth(ctx);
+    requireAdmin(currentUser);
+
+    await ctx.db.patch(args.userId, {
+      isMT: args.isMT,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 // Register current Clerk user in Convex (self-registration)
 export const registerCurrentUser = mutation({
   args: {

@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Loader2, Users, X } from "lucide-react";
 import Link from "next/link";
 
 export default function NieuweVergaderingPage() {
@@ -18,6 +19,7 @@ export default function NieuweVergaderingPage() {
   const [title, setTitle] = useState("");
   const [selectedType, setSelectedType] = useState<string>("");
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+  const [selectedAttendees, setSelectedAttendees] = useState<string[]>([]);
   const [date, setDate] = useState("");
   const [time, setTime] = useState("09:00");
   const [duration, setDuration] = useState(60);
@@ -31,10 +33,24 @@ export default function NieuweVergaderingPage() {
     );
   };
 
+  const toggleAttendee = (userId: string) => {
+    setSelectedAttendees((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
   const departments = useQuery(api.departments.list, {});
   const meetingTypes = useQuery(api.meetingTypes.list, {});
   const users = useQuery(api.users.list, {});
   const createMeeting = useMutation(api.meetings.create);
+
+  // Filter users by selected departments
+  const filteredUsers = users?.filter((user) => {
+    if (selectedDepartments.length === 0) return true;
+    return selectedDepartments.includes(user.departmentId) || user.isMT;
+  }) || [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,16 +62,13 @@ export default function NieuweVergaderingPage() {
       const meetingDate = new Date(date);
       meetingDate.setHours(hours, minutes, 0, 0);
 
-      const firstUser = users?.[0];
-      if (!firstUser) return;
-
       await createMeeting({
         title,
         meetingTypeId: selectedType as Id<"meetingTypes">,
         date: meetingDate.getTime(),
         duration,
         departmentIds: selectedDepartments as Id<"departments">[],
-        attendeeIds: [firstUser._id],
+        attendeeIds: selectedAttendees as Id<"users">[],
       });
 
       router.push("/vergaderingen");
@@ -167,6 +180,60 @@ export default function NieuweVergaderingPage() {
                   min={5}
                   max={480}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Deelnemers
+                </Label>
+                {selectedAttendees.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {selectedAttendees.map((userId) => {
+                      const user = users?.find((u) => u._id === userId);
+                      return user ? (
+                        <Badge key={userId} variant="secondary" className="pr-1">
+                          {user.name}
+                          <button
+                            type="button"
+                            onClick={() => toggleAttendee(userId)}
+                            className="ml-1 hover:bg-muted rounded-full p-0.5"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ) : null;
+                    })}
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-lg p-2">
+                  {filteredUsers.length === 0 ? (
+                    <p className="col-span-2 text-sm text-muted-foreground text-center py-4">
+                      Selecteer eerst een afdeling
+                    </p>
+                  ) : (
+                    filteredUsers.map((user) => (
+                      <label
+                        key={user._id}
+                        className="flex items-center space-x-2 rounded-lg border p-2 cursor-pointer hover:bg-muted"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedAttendees.includes(user._id)}
+                          onChange={() => toggleAttendee(user._id)}
+                          className="h-4 w-4"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium block truncate">{user.name}</span>
+                          <span className="text-xs text-muted-foreground block truncate">{user.email}</span>
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {selectedAttendees.length} deelnemer(s) geselecteerd
+                </p>
               </div>
 
               <div className="flex gap-4 pt-4">

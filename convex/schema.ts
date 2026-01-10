@@ -17,6 +17,7 @@ export default defineSchema({
     name: v.string(),
     imageUrl: v.optional(v.string()),
     departmentId: v.id("departments"),
+    isMT: v.optional(v.boolean()), // User is also MT member (in addition to their department)
     role: v.union(v.literal("admin"), v.literal("department_head"), v.literal("member")),
     createdAt: v.number(),
     updatedAt: v.number(),

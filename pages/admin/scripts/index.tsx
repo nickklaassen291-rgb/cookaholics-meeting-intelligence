@@ -13,15 +13,47 @@ import {
   ChevronRight,
   Star,
   Sparkles,
+  Shield,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 
 export default function ScriptsPage() {
+  const router = useRouter();
   const [isSeeding, setIsSeeding] = useState(false);
 
+  const currentUser = useQuery(api.users.getCurrentUser);
   const meetingTypes = useQuery(api.meetingTypes.list, {});
   const scripts = useQuery(api.meetingScripts.list, {});
   const seedScripts = useMutation(api.meetingScripts.seed);
+
+  // Admin-only access check
+  if (currentUser === undefined) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (currentUser === null || currentUser.role !== "admin") {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center h-64 space-y-4">
+          <Shield className="h-16 w-16 text-muted-foreground" />
+          <h1 className="text-2xl font-bold">Geen toegang</h1>
+          <p className="text-muted-foreground">
+            Je hebt admin rechten nodig om deze pagina te bekijken.
+          </p>
+          <Button onClick={() => router.push("/dashboard")}>
+            Terug naar Dashboard
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
 
   const handleSeed = async () => {
     setIsSeeding(true);
