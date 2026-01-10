@@ -12,6 +12,7 @@ import {
   Settings,
   Users,
   UserCheck,
+  HelpCircle,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +59,11 @@ const mainNavItems: NavItem[] = [
     href: "/meldingen",
     label: "Meldingen",
     icon: <Bell className="h-4 w-4" />,
+  },
+  {
+    href: "/help",
+    label: "Handleiding",
+    icon: <HelpCircle className="h-4 w-4" />,
   },
 ];
 
