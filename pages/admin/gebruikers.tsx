@@ -84,10 +84,12 @@ export default function AdminGebruikersPage() {
 
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [inviteDepartment, setInviteDepartment] = useState<string>("");
 
-  const inviteUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/sign-up`
-    : "";
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const inviteUrl = inviteDepartment
+    ? `${baseUrl}/sign-up?afdeling=${inviteDepartment}`
+    : `${baseUrl}/sign-up`;
 
   // Filter users
   const filteredUsers = users?.filter((user) => {
@@ -440,16 +442,44 @@ export default function AdminGebruikersPage() {
         </Dialog>
 
         {/* Invite User Dialog */}
-        <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+        <Dialog open={showInviteDialog} onOpenChange={(open) => {
+          setShowInviteDialog(open);
+          if (!open) {
+            setInviteDepartment("");
+            setCopied(false);
+          }
+        }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Gebruiker uitnodigen</DialogTitle>
               <DialogDescription>
-                Deel de uitnodigingslink met nieuwe teamleden
+                Kies een afdeling en deel de uitnodigingslink
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Afdeling</label>
+                <Select value={inviteDepartment} onValueChange={(v) => {
+                  setInviteDepartment(v);
+                  setCopied(false);
+                }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecteer een afdeling" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments?.map((dept) => (
+                      <SelectItem key={dept._id} value={dept.slug}>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4" />
+                          {dept.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-sm font-medium">Uitnodigingslink</label>
                 <div className="flex gap-2">
@@ -465,15 +495,20 @@ export default function AdminGebruikersPage() {
                     )}
                   </Button>
                 </div>
+                {inviteDepartment && (
+                  <p className="text-xs text-muted-foreground">
+                    Nieuwe gebruiker wordt automatisch toegevoegd aan {departments?.find(d => d.slug === inviteDepartment)?.name}
+                  </p>
+                )}
               </div>
 
               <div className="rounded-lg bg-blue-50 p-4 space-y-2">
                 <p className="text-sm font-medium text-blue-900">Hoe het werkt:</p>
                 <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-                  <li>Deel de link met je collega</li>
+                  <li>Kies de afdeling voor de nieuwe gebruiker</li>
+                  <li>Kopieer en deel de link met je collega</li>
                   <li>Zij maken een account aan</li>
-                  <li>Je ziet ze verschijnen in deze lijst</li>
-                  <li>Wijs de juiste rol en afdeling toe</li>
+                  <li>Ze worden automatisch aan de juiste afdeling toegevoegd</li>
                 </ol>
               </div>
             </div>

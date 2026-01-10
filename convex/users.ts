@@ -151,6 +151,7 @@ export const registerCurrentUser = mutation({
   args: {
     name: v.string(),
     email: v.string(),
+    departmentSlug: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -168,14 +169,26 @@ export const registerCurrentUser = mutation({
       return { message: "User already exists", userId: existingUser._id };
     }
 
-    // Get MT department as default for new users (admin can change later)
-    const mtDept = await ctx.db
-      .query("departments")
-      .withIndex("by_slug", (q) => q.eq("slug", "mt"))
-      .first();
+    // Get department - use provided slug or default to MT
+    let department = null;
+    if (args.departmentSlug) {
+      const slug = args.departmentSlug;
+      department = await ctx.db
+        .query("departments")
+        .withIndex("by_slug", (q) => q.eq("slug", slug))
+        .first();
+    }
 
-    if (!mtDept) {
-      throw new Error("MT afdeling niet gevonden. Run eerst departments:seed");
+    // Fallback to MT if department not found
+    if (!department) {
+      department = await ctx.db
+        .query("departments")
+        .withIndex("by_slug", (q) => q.eq("slug", "mt"))
+        .first();
+    }
+
+    if (!department) {
+      throw new Error("Afdeling niet gevonden. Run eerst departments:seed");
     }
 
     const now = Date.now();
@@ -183,7 +196,7 @@ export const registerCurrentUser = mutation({
       clerkId: identity.subject,
       email: args.email || identity.email || "",
       name: args.name || identity.name || "Nieuwe Gebruiker",
-      departmentId: mtDept._id,
+      departmentId: department._id,
       role: "member", // New users get member role by default
       createdAt: now,
       updatedAt: now,

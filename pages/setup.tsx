@@ -20,6 +20,9 @@ export default function SetupPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Get department from URL query parameter
+  const departmentSlug = router.query.afdeling as string | undefined;
+
   // Pre-fill from Clerk user
   useState(() => {
     if (user) {
@@ -34,7 +37,7 @@ export default function SetupPage() {
     setError(null);
 
     try {
-      await registerUser({ name, email });
+      await registerUser({ name, email, departmentSlug });
       setSuccess(true);
       setTimeout(() => {
         router.push("/");
